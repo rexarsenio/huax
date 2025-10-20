@@ -1,0 +1,8 @@
+duckdb>=1.0
+python-dotenv==1.0.1
+websockets==12.0
+prometheus-client==0.20.0
+pandera>=0.20.0
+copernicusmarine>=1.0.0
+xarray>=2023.1.0
+netcdf4>=1.6.0

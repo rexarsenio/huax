@@ -1,0 +1,85 @@
+ingest:
+  lookback_days: 400
+  mpa:
+    base_url: "https://api.mpa.gov.sg/vessels"  # placeholder
+  rotterdam:
+    base_url: "https://api.portofrotterdam.com/calls"  # placeholder
+  straits:
+    base_url: "https://opendata.turkeyvts.com/notices"  # placeholder
+sea_state:
+  provider: "cmems"
+  waves_dataset_id: "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i"
+  currents_dataset_id: "cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m"
+  lookback_days: 3
+  out_dir: "data/sea_state"
+  buffer_km: 50
+  features:
+    - id: "hs"
+      dataset: "waves"
+      type: "scalar"
+      variables: ["VHM0", "hs", "swh", "significant_wave_height"]
+      stats: ["mean", "p95"]
+    - id: "sst_anom"
+      dataset: "waves"
+      type: "scalar"
+      variables: ["sst_anom", "thetao_anomaly"]
+      stats: ["mean", "p90"]
+    - id: "wind_speed"
+      dataset: "waves"
+      type: "vector_magnitude"
+      variables: ["u10", "v10"]
+      stats: ["p90"]
+    - id: "current_speed"
+      dataset: "currents"
+      type: "vector_magnitude"
+      variables: ["uo", "vo"]
+      stats: ["p90"]
+    - id: "opp_current"
+      dataset: "currents"
+      type: "opposing"
+      variables: ["uo", "vo"]
+      stats: ["mean"]
+chokepoints:
+  CQ_SG:
+    bbox:
+      lat_min: 0.5
+      lat_max: 2.0
+      lon_min: 103.3
+      lon_max: 104.3
+    bearing_deg: 300
+  CQ_TR:
+    bbox:
+      lat_min: 40.9
+      lat_max: 41.4
+      lon_min: 28.6
+      lon_max: 29.3
+    bearing_deg: 20
+  PORT_EU:
+    bbox:
+      lat_min: 51.9
+      lat_max: 52.1
+      lon_min: 3.9
+      lon_max: 4.2
+    bearing_deg: 270
+index:
+  weights:
+    CQ_TR: 1.0
+    CQ_SG: 1.0
+    PORT_EU: 1.0
+    CQ_CHOKE: 0.8  # Composite chokepoint congestion from AIS
+    SEA_HS_Z: 0.08  # Significant wave height anomaly
+    OPPOSING_CURRENT: 0.05  # Opposing current component
+    # Optional: individual chokepoint weights (currently using composite)
+    # CQ_SG_AIS: 0.5
+    # CQ_SUEZ: 0.5
+    # CQ_BOSPORUS: 0.3
+    # CQ_HORMUZ: 0.3
+  floor_hours: 6
+train:
+  test_start: "2023-01-01"
+  target_spread: "Brent_M1M2"
+  precision_top_frac: 0.1
+  spread_threshold_bp: 5
+serve:
+  host: "0.0.0.0"
+  port: 8080

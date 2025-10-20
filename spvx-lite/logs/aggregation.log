@@ -1,0 +1,20 @@
+[DWELL] Processing 2543 raw AIS records...
+[DWELL] Aggregation completed:
+  bosporus: 2 windows, 35 slow vessel observations
+  singapore_malacca: 2 windows, 541 slow vessel observations
+
+[DWELL] Latest 5 observations:
+  2025-10-13 14:40:00 | bosporus             |  21 slow vessels
+  2025-10-13 14:40:00 | singapore_malacca    | 341 slow vessels
+  2025-10-13 14:30:00 | bosporus             |  14 slow vessels
+  2025-10-13 14:30:00 | singapore_malacca    | 200 slow vessels
+[DWELL] Processing 2543 raw AIS records...
+[DWELL] Aggregation completed:
+  bosporus: 2 windows, 35 slow vessel observations
+  singapore_malacca: 2 windows, 541 slow vessel observations
+
+[DWELL] Latest 5 observations:
+  2025-10-13 14:40:00 | bosporus             |  21 slow vessels
+  2025-10-13 14:40:00 | singapore_malacca    | 341 slow vessels
+  2025-10-13 14:30:00 | bosporus             |  14 slow vessels
+  2025-10-13 14:30:00 | singapore_malacca    | 200 slow vessels

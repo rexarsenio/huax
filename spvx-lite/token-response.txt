@@ -1,0 +1,64 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host login-uat.nxtport.com:443 was resolved.
+* IPv6: (none)
+* IPv4: 52.233.238.227
+*   Trying 52.233.238.227:443...
+* Connected to login-uat.nxtport.com (52.233.238.227) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [326 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+{ [108 bytes data]
+* TLSv1.2 (IN), TLS handshake, Certificate (11):
+{ [4873 bytes data]
+* TLSv1.2 (IN), TLS handshake, Server key exchange (12):
+{ [333 bytes data]
+* TLSv1.2 (IN), TLS handshake, Server finished (14):
+{ [4 bytes data]
+* TLSv1.2 (OUT), TLS handshake, Client key exchange (16):
+} [70 bytes data]
+* TLSv1.2 (OUT), TLS change cipher, Change cipher spec (1):
+} [1 bytes data]
+* TLSv1.2 (OUT), TLS handshake, Finished (20):
+} [16 bytes data]
+* TLSv1.2 (IN), TLS change cipher, Change cipher spec (1):
+{ [1 bytes data]
+* TLSv1.2 (IN), TLS handshake, Finished (20):
+{ [16 bytes data]
+* SSL connection using TLSv1.2 / ECDHE-RSA-AES256-GCM-SHA384 / [blank] / UNDEF
+* ALPN: server accepted http/1.1
+* Server certificate:
+*  subject: C=BE; ST=Antwerpen; O=Nxtport; CN=nxtport.com
+*  start date: Mar 27 00:00:00 2025 GMT
+*  expire date: Apr 14 23:59:59 2026 GMT
+*  subjectAltName: host "login-uat.nxtport.com" matched cert's "*.nxtport.com"
+*  issuer: C=GB; ST=Greater Manchester; L=Salford; O=Sectigo Limited; CN=Sectigo RSA Organization Validation Secure Server CA
+*  SSL certificate verify ok.
+* using HTTP/1.x
+> POST /connect/token HTTP/1.1
+> Host: login-uat.nxtport.com
+> User-Agent: curl/8.7.1
+> Accept: */*
+> Content-Type: application/x-www-form-urlencoded
+> Content-Length: 197
+> 
+} [197 bytes data]
+* upload completely sent off: 197 bytes
+< HTTP/1.1 200 OK
+< Date: Thu, 16 Oct 2025 11:01:29 GMT
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 1488
+< Connection: keep-alive
+< Server: Microsoft-IIS/10.0
+< Cache-Control: no-store, no-cache, max-age=0
+< Pragma: no-cache
+< Request-Context: appId=cid-v1:804f6a59-9c5c-4e4a-ba47-3e6e1a36107b
+< X-Powered-By: ASP.NET
+< 
+{ [1488 bytes data]
+100  1685  100  1488  100   197   2524    334 --:--:-- --:--:-- --:--:--  2860
+* Connection #0 to host login-uat.nxtport.com left intact
+{"access_token":"redacted","expires_in":3600,"token_type":"Bearer","scope":"openid"}

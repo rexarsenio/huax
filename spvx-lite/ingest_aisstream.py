@@ -1,0 +1,617 @@
+"""
+Minimal AISStream.io consumer that writes tanker messages into DuckDB and
+periodically aggregates the chokepoint dwell metrics using the shared
+connection. Designed to run as a long-lived launchd/systemd service.
+
+Environment variables:
+    AISSTREAM_API_KEY        - required
+    DUCKDB_PATH              - optional, defaults to db/spvx.duckdb
+    AGGREGATION_INTERVAL_SECONDS - optional, defaults to 600 (10 minutes)
+    SPVX_METRICS_PORT        - Prometheus endpoint port (default: 9108)
+    SPVX_HEALTH_PORT         - Health/ready HTTP port (default: 9109)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import json
+import logging
+import os
+import signal
+import threading
+from contextlib import suppress
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import Any, Dict
+
+import duckdb
+import websockets
+from dotenv import load_dotenv
+from prometheus_client import Counter, Gauge, Summary, start_http_server
+
+from aggregate_dwell import AggregationResult, run_aggregation
+from chokepoints import CHOKEPOINTS, bounding_boxes
+from spvx.ingest.canonicalize import canonicalize
+
+load_dotenv()
+
+LOG = logging.getLogger("spvx.ingest")
+
+API_KEY = os.getenv("AISSTREAM_API_KEY")
+WS_URL = "wss://stream.aisstream.io/v0/stream"
+
+DEFAULT_DUCKDB = Path(__file__).resolve().parent / "db" / "spvx.duckdb"
+DUCKDB_PATH = Path(os.getenv("DUCKDB_PATH", str(DEFAULT_DUCKDB)))
+
+
+def _aggregation_interval() -> int:
+    raw_value = os.getenv("AGGREGATION_INTERVAL_SECONDS", "600")
+    try:
+        value = int(raw_value)
+        return value if value > 0 else 600
+    except ValueError:
+        LOG.warning(
+            "Invalid AGGREGATION_INTERVAL_SECONDS='%s'. Falling back to 600 seconds.",
+            raw_value,
+        )
+        return 600
+
+
+AGGREGATION_INTERVAL_SECONDS = _aggregation_interval()
+METRICS_PORT = int(os.getenv("SPVX_METRICS_PORT", "9108"))
+METRICS_HOST = os.getenv("SPVX_METRICS_HOST", "0.0.0.0")
+HEALTH_PORT = int(os.getenv("SPVX_HEALTH_PORT", "9109"))
+HEALTH_HOST = os.getenv("SPVX_HEALTH_HOST", "0.0.0.0")
+
+AGG_RUNS = Counter("spvx_aggregation_runs_total", "Total successful dwell aggregation runs.")
+AGG_DURATION = Summary("spvx_aggregation_duration_seconds", "Dwell aggregation duration.")
+AGG_LAST_WINDOW_EPOCH = Gauge(
+    "spvx_aggregation_last_window_epoch",
+    "Unix epoch of the latest aggregated dwell window.",
+)
+AGG_WINDOW_COUNT = Gauge(
+    "spvx_aggregation_last_window_count",
+    "Number of dwell windows processed in the last aggregation run.",
+)
+AGG_JITTER = Gauge(
+    "spvx_aggregation_jitter_seconds",
+    "Scheduler jitter (seconds) measured at aggregation start.",
+)
+AGG_JITTER_RATIO = Gauge(
+    "spvx_agg_jitter_ratio",
+    "Absolute jitter expressed as a fraction of the configured aggregation interval.",
+)
+CONFIG_AGG_INTERVAL = Gauge(
+    "spvx_config_agg_interval_seconds",
+    "Configured aggregation interval in seconds.",
+)
+SOURCE_FRESHNESS = Gauge(
+    "spvx_source_freshness_seconds",
+    "Age of the latest raw AIS observation in seconds.",
+)
+INGEST_RAW_MESSAGES = Counter("spvx_ingest_raw_msgs_total", "Total AIS messages received from the stream.")
+INGEST_CANON_MESSAGES = Counter("spvx_ingest_canon_msgs_total", "Total canonical AIS messages stored.")
+INGEST_UNIQUE_MMSI_5M = Gauge("spvx_ingest_unique_mmsi_5m", "Distinct MMSI observed in the last five minutes.")
+INGEST_TANKER_SHARE_5M = Gauge("spvx_ingest_tanker_share_5m", "Share of canonical messages flagged as tankers in the last five minutes.")
+
+METRICS_STARTED = False
+
+
+@dataclass
+class AggregationTelemetry:
+    last_completed: dt.datetime | None = None
+    last_duration: float = 0.0
+    last_jitter: float = 0.0
+    last_jitter_ratio: float = 0.0
+    last_window: dt.datetime | None = None
+    last_window_count: int = 0
+    source_freshness_seconds: float | None = None
+
+
+AGG_TELEMETRY = AggregationTelemetry()
+TELEMETRY_LOCK = threading.Lock()
+
+STOP_EVENT: asyncio.Event | None = None
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    server_version = "spvx-health/1.0"
+
+    def _write_json(self, status: int, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/health":
+            self._write_json(200, {"status": "ok"})
+            return
+
+        if self.path == "/ready":
+            with TELEMETRY_LOCK:
+                last_completed = AGG_TELEMETRY.last_completed
+                last_window = AGG_TELEMETRY.last_window
+                freshness_seconds = AGG_TELEMETRY.source_freshness_seconds
+            if last_completed is None:
+                self._write_json(
+                    503,
+                    {"status": "not_ready", "reason": "no_successful_aggregation"},
+                )
+                return
+            age = (dt.datetime.now(dt.timezone.utc) - last_completed).total_seconds()
+            if age > AGGREGATION_INTERVAL_SECONDS * 2:
+                self._write_json(
+                    503,
+                    {
+                        "status": "not_ready",
+                        "reason": "aggregation_stale",
+                        "age_seconds": age,
+                    },
+                )
+            else:
+                self._write_json(
+                    200,
+                    {
+                        "status": "ready",
+                        "age_seconds": age,
+                        "last_window": last_window.isoformat() if last_window else None,
+                        "source_freshness_seconds": freshness_seconds,
+                    },
+                )
+            return
+
+        self._write_json(404, {"status": "not_found"})
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
+        # Suppress default noisy logging; rely on main logger if needed.
+        return
+
+
+def _ensure_db() -> duckdb.DuckDBPyConnection:
+    DUCKDB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect(str(DUCKDB_PATH))
+    con.execute("PRAGMA disable_checkpoint_on_shutdown")
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ais_raw (
+            ts TIMESTAMP,
+            mmsi BIGINT,
+            lat DOUBLE,
+            lon DOUBLE,
+            sog DOUBLE,
+            cog DOUBLE,
+            nav INTEGER,
+            shiptype INTEGER,
+            src TEXT,
+            region TEXT
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ais_canon (
+            msg_time TIMESTAMP,
+            rx_time TIMESTAMP,
+            mmsi TEXT,
+            lat DOUBLE,
+            lon DOUBLE,
+            sog DOUBLE,
+            cog DOUBLE,
+            is_tanker BOOLEAN,
+            shiptype_num INTEGER,
+            shiptype_str TEXT,
+            region TEXT,
+            src TEXT,
+            PRIMARY KEY (mmsi, msg_time)
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ais_golden_mmsi (
+            mmsi TEXT PRIMARY KEY
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE OR REPLACE VIEW golden_probe AS
+        SELECT
+            msg_time,
+            rx_time,
+            mmsi,
+            sog,
+            lat,
+            lon,
+            region,
+            src
+        FROM ais_canon
+        WHERE mmsi IN (SELECT mmsi FROM ais_golden_mmsi)
+        """
+    )
+    return con
+
+
+def _region_for(lat: float, lon: float) -> str | None:
+    for name, box in CHOKEPOINTS.items():
+        lon_min, lat_min, lon_max, lat_max = box
+        if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
+            return name
+    return None
+
+
+def _extract_numeric(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _refresh_ingest_metrics(con: duckdb.DuckDBPyConnection) -> None:
+    window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
+    unique = con.execute(
+        "SELECT COUNT(DISTINCT mmsi) FROM ais_canon WHERE rx_time >= ?",
+        [window_start],
+    ).fetchone()[0]
+    counts = con.execute(
+        """
+        SELECT
+            COUNT(*)::DOUBLE,
+            SUM(CASE WHEN is_tanker THEN 1 ELSE 0 END)::DOUBLE
+        FROM ais_canon
+        WHERE rx_time >= ?
+        """,
+        [window_start],
+    ).fetchone()
+    total = counts[0] or 0.0
+    tanker = counts[1] or 0.0
+    share = tanker / total if total else 0.0
+    INGEST_UNIQUE_MMSI_5M.set(unique or 0)
+    INGEST_TANKER_SHARE_5M.set(share)
+
+
+async def _process_messages(
+    ws,
+    con: duckdb.DuckDBPyConnection,
+    lock: asyncio.Lock,
+    stop_event: asyncio.Event,
+) -> None:
+    """Process incoming WebSocket messages and insert into database."""
+    msg_count = 0
+    insert_count = 0
+
+    async for raw in ws:
+        if stop_event.is_set():
+            break
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+
+        msg_count += 1
+
+        if msg_count <= 3:
+            LOG.debug("Message #%s: %s", msg_count, json.dumps(payload)[:500])
+
+        message = payload.get("Message") or {}
+        msg_type = payload.get("MessageType", "")
+
+        if msg_type == "PositionReport":
+            data = message.get("PositionReport") or {}
+        elif "PositionReport" in message:
+            data = message.get("PositionReport")
+        else:
+            data = message
+
+        canonical = canonicalize(payload)
+        if canonical is None:
+            continue
+
+        region = _region_for(canonical["lat"], canonical["lon"])
+        if region is None:
+            continue
+
+        nav = data.get("NavigationalStatus") or data.get("NavigationStatus")
+        shiptype = data.get("ShipType") or message.get("ShipType")
+
+        async with lock:
+            INGEST_RAW_MESSAGES.inc()
+            con.execute(
+                """
+                INSERT INTO ais_raw VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    canonical["rx_time"],
+                    int(canonical["mmsi"]),
+                    canonical["lat"],
+                    canonical["lon"],
+                    canonical["sog"],
+                    canonical["cog"] if canonical["cog"] is not None else 0.0,
+                    int(nav) if isinstance(nav, (int, float)) else -1,
+                    int(shiptype) if isinstance(shiptype, (int, float)) else -1,
+                    "aisstream",
+                    region,
+                ],
+            )
+
+            con.execute(
+                """
+                INSERT OR REPLACE INTO ais_canon (
+                    msg_time,
+                    rx_time,
+                    mmsi,
+                    lat,
+                    lon,
+                    sog,
+                    cog,
+                    is_tanker,
+                    shiptype_num,
+                    shiptype_str,
+                    region,
+                    src
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    canonical["msg_time"],
+                    canonical["rx_time"],
+                    canonical["mmsi"],
+                    canonical["lat"],
+                    canonical["lon"],
+                    canonical["sog"],
+                    canonical["cog"],
+                    canonical["is_tanker"],
+                    canonical["shiptype_num"],
+                    canonical["shiptype_str"],
+                    region,
+                    "aisstream",
+                ],
+            )
+            INGEST_CANON_MESSAGES.inc()
+            insert_count += 1
+            if insert_count % 100 == 0:
+                con.commit()
+                LOG.info(
+                    "[AIS] Inserted %s records (received %s messages)",
+                    insert_count,
+                    msg_count,
+                )
+                _refresh_ingest_metrics(con)
+
+
+def _record_aggregation_metrics(
+    result: AggregationResult,
+    duration: float,
+    jitter: float,
+    interval_seconds: int,
+    freshness_seconds: float | None,
+) -> None:
+    now = dt.datetime.now(dt.timezone.utc)
+    AGG_DURATION.observe(duration)
+    AGG_JITTER.set(jitter)
+    AGG_WINDOW_COUNT.set(result.window_count)
+    ratio = abs(jitter) / interval_seconds if interval_seconds > 0 else 0.0
+    AGG_JITTER_RATIO.set(ratio)
+    if result.last_window:
+        AGG_LAST_WINDOW_EPOCH.set(result.last_window.timestamp())
+    AGG_RUNS.inc()
+    if freshness_seconds is not None:
+        SOURCE_FRESHNESS.set(freshness_seconds)
+
+    with TELEMETRY_LOCK:
+        AGG_TELEMETRY.last_completed = now
+        AGG_TELEMETRY.last_duration = duration
+        AGG_TELEMETRY.last_jitter = jitter
+        AGG_TELEMETRY.last_jitter_ratio = ratio
+        AGG_TELEMETRY.last_window = result.last_window
+        AGG_TELEMETRY.last_window_count = result.window_count
+        AGG_TELEMETRY.source_freshness_seconds = freshness_seconds
+
+    log_method = LOG.info
+    if abs(jitter) > interval_seconds * 0.1:
+        log_method = LOG.warning
+
+    log_method(
+        "[AGG] completed in %.2fs | jitter=%.3fs | windows=%d",
+        duration,
+        jitter,
+        result.window_count,
+    )
+
+
+async def _sleep_until(stop_event: asyncio.Event, deadline: float) -> None:
+    loop = asyncio.get_running_loop()
+    while not stop_event.is_set():
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=remaining)
+        except asyncio.TimeoutError:
+            break
+
+
+async def _periodic_aggregation(
+    con: duckdb.DuckDBPyConnection,
+    lock: asyncio.Lock,
+    interval_seconds: int,
+    stop_event: asyncio.Event,
+) -> None:
+    """
+    Periodically run the aggregation using the shared DuckDB connection.
+    """
+    loop = asyncio.get_running_loop()
+    initial_delay = min(30.0, interval_seconds / 2)
+    next_due = loop.time() + initial_delay
+
+    await _sleep_until(stop_event, next_due)
+    if stop_event.is_set():
+        return
+
+    while not stop_event.is_set():
+        async with lock:
+            con.commit()
+            started = loop.time()
+            freshness_seconds = None
+            try:
+                result = run_aggregation(con, interval_seconds=interval_seconds)
+            except Exception as exc:  # pragma: no cover - defensive
+                LOG.exception("Aggregation failed: %s", exc)
+                result = None
+            duration = loop.time() - started
+
+            if result:
+                latest_row = con.execute("SELECT MAX(msg_time) FROM ais_canon").fetchone()
+                latest_ts = latest_row[0] if latest_row else None
+                if isinstance(latest_ts, dt.datetime):
+                    if latest_ts.tzinfo is None:
+                        latest_ts = latest_ts.replace(tzinfo=dt.timezone.utc)
+                    else:
+                        latest_ts = latest_ts.astimezone(dt.timezone.utc)
+                    freshness_seconds = max(
+                        0.0, (dt.datetime.now(dt.timezone.utc) - latest_ts).total_seconds()
+                    )
+
+        jitter = started - next_due
+
+        if result:
+            _record_aggregation_metrics(result, duration, jitter, interval_seconds, freshness_seconds)
+
+        next_due += interval_seconds
+        await _sleep_until(stop_event, next_due)
+
+
+def _start_health_server() -> HTTPServer:
+    server = HTTPServer((HEALTH_HOST, HEALTH_PORT), _HealthHandler)
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="spvx-health",
+        daemon=True,
+    )
+    thread.start()
+    LOG.info("Health endpoints available on http://%s:%d", HEALTH_HOST, HEALTH_PORT)
+    return server
+
+
+def _start_metrics_server() -> None:
+    global METRICS_STARTED
+    if METRICS_STARTED:
+        return
+    start_http_server(METRICS_PORT, addr=METRICS_HOST)
+    CONFIG_AGG_INTERVAL.set(AGGREGATION_INTERVAL_SECONDS)
+    METRICS_STARTED = True
+    LOG.info("Prometheus metrics available on http://%s:%d/metrics", METRICS_HOST, METRICS_PORT)
+
+
+def _handle_shutdown(signum: int, _frame: Any) -> None:
+    LOG.info("Received signal %s; initiating shutdown.", signum)
+    if STOP_EVENT is not None:
+        STOP_EVENT.set()
+
+
+async def consume() -> None:
+    if not API_KEY:
+        raise RuntimeError("AISSTREAM_API_KEY not set in environment (.env)")
+
+    global STOP_EVENT
+    STOP_EVENT = asyncio.Event()
+    stop_event = STOP_EVENT
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with suppress(NotImplementedError):
+            loop.add_signal_handler(sig, _handle_shutdown, sig, None)
+
+    _start_metrics_server()
+    health_server = _start_health_server()
+
+    subscription: Dict[str, Any] = {
+        "APIKey": API_KEY,
+        "BoundingBoxes": bounding_boxes(),
+        "FiltersShipMMSI": [],
+        "FilterMessageTypes": ["PositionReport"],
+        "FiltersShipType": list(range(80, 90)),
+    }
+
+    con = _ensure_db()
+    db_lock = asyncio.Lock()
+    try:
+        _refresh_ingest_metrics(con)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        LOG.debug("Unable to refresh ingest metrics on startup: %s", exc)
+    aggregation_task = asyncio.create_task(
+        _periodic_aggregation(con, db_lock, AGGREGATION_INTERVAL_SECONDS, stop_event)
+    )
+
+    LOG.info("Connected to DuckDB at %s", DUCKDB_PATH)
+    LOG.info("Subscribing to chokepoints: %s", ", ".join(CHOKEPOINTS.keys()))
+
+    retry_delay = 5
+    max_retry_delay = 60
+
+    try:
+        while not stop_event.is_set():
+            try:
+                async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=20) as ws:
+                    subscription_msg = json.dumps(subscription)
+                    LOG.info(
+                        "Sending subscription for %d bounding boxes...",
+                        len(subscription["BoundingBoxes"]),
+                    )
+                    await ws.send(subscription_msg)
+                    LOG.info("WebSocket connected successfully")
+
+                    try:
+                        first_msg = await asyncio.wait_for(ws.recv(), timeout=10)
+                        LOG.debug("Received first message: %s", first_msg[:500])
+                    except asyncio.TimeoutError:
+                        LOG.warning("No response from server within 10 seconds after subscription.")
+
+                    retry_delay = 5
+
+                    await _process_messages(ws, con, db_lock, stop_event)
+
+            except (
+                websockets.exceptions.ConnectionClosedError,
+                websockets.exceptions.ConnectionClosedOK,
+                asyncio.exceptions.IncompleteReadError,
+            ) as exc:
+                if stop_event.is_set():
+                    break
+                LOG.warning("Connection lost: %s. Reconnecting in %s seconds...", exc, retry_delay)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, max_retry_delay)
+            except Exception as exc:
+                if stop_event.is_set():
+                    break
+                LOG.exception("Unexpected error: %s. Reconnecting in %s seconds...", exc, retry_delay)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, max_retry_delay)
+    finally:
+        stop_event.set()
+        aggregation_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await aggregation_task
+        with suppress(Exception):
+            con.commit()
+            con.close()
+        health_server.shutdown()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=os.getenv("SPVX_LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
+    try:
+        asyncio.run(consume())
+    except KeyboardInterrupt:
+        LOG.info("Consumer stopped by user.")

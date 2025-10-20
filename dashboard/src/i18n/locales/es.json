@@ -1,0 +1,198 @@
+{
+  "app": {
+    "title": "Panel operativo SPVX-Lite",
+    "subtitle": "Señales de cuellos de botella, spreads y nowcasts de throughput.",
+    "footer": "© {{year}} Huax Energy Intelligence. Actualización automática cada pocos minutos · Datos del servicio FastAPI."
+  },
+  "nav": {
+    "overview": "Resumen",
+    "operations": "Operaciones y estado"
+  },
+  "theme": {
+    "dark": "Modo oscuro",
+    "light": "Modo claro"
+  },
+  "actions": {
+    "refresh": "Actualizar",
+    "language": "Idioma"
+  },
+  "status": {
+    "ready": "Listo",
+    "ok": "Saludable",
+    "not_ready": "No listo",
+    "missing": "Faltante"
+  },
+  "dashboard": {
+    "latestIndex": {
+      "title": "Índice más reciente",
+      "label": "Nivel SPVX-Lite"
+    },
+    "indexPerformance": {
+      "title": "Desempeño del índice",
+      "window": "Últimos {{days}}d"
+    },
+    "modelActivity": {
+      "title": "Actividad de los modelos",
+      "subtitle": "Últimos 5 eventos de inferencia",
+      "spread": "Señales del spread",
+      "throughput": "Nowcast de throughput",
+      "placeholder": "Esperando datos"
+    },
+    "signals": {
+      "title": "Instantánea de señales",
+      "subtitle": "Actualizado el {{datetime}}",
+      "errorTitle": "No fue posible cargar las señales actuales.",
+      "errorBody": "No fue posible obtener las señales. Inténtalo de nuevo.",
+      "degraded": "Modo degradado activo. Revisar señales.",
+      "spvxLite": "SPVX-Lite",
+      "change": "Cambio diario",
+  "spread": {
+    "label": "Dirección del spread",
+    "topDecile": "Señal en el decil superior",
+    "outside": "Fuera del decil",
+    "fallback": "Fallback ({{strategy}})",
+    "notAvailable": "No disponible"
+  },
+      "throughput": {
+        "label": "Throughput 72h",
+        "mae": "MAE unidades",
+        "awaiting": "A la espera del resultado del modelo"
+      },
+      "drivers": "Drivers",
+      "nowcast": {
+        "label": "Horizonte del nowcast",
+        "date": "Fecha",
+        "value": "Throughput previsto"
+      }
+    },
+    "meta": {
+      "title": "SPVX-Lite",
+      "error": "No se pudieron cargar los metadatos del índice.",
+      "ruleOfThumb": "Regla práctica",
+      "materialMove": "Movimiento material ≥ {{points}} pts",
+      "coverage": "Cobertura",
+      "methodologyLink": "Metodología y Transparencia",
+      "tableTitle": "Cobertura por componente",
+      "component": "Componente",
+      "geofence": "Zona",
+      "cadence": "Frecuencia",
+      "note": "Nota",
+      "transparency": "Artefactos de transparencia",
+      "tagline": "SPVX-Lite mide la incertidumbre diaria en los flujos marítimos de petróleo.",
+      "description": "Fuentes: datos AIS/puertos y ajustes meteorológicos; fijación a las 12:00 UTC (T+1).",
+      "ruleOfThumbText": "Regla práctica: 80–120 normal, 120–150 tenso, >150 estrés. Movimientos ≥ +10 pts son materiales.",
+      "materialMoveLabel": "Movimiento material ≥ {{points}} pts",
+      "band": {
+        "normal": "Normal",
+        "normalRange": "80–120",
+        "tense": "Zona tensa",
+        "tenseRange": "120–150",
+        "stress": "Evento de estrés",
+        "stressRange": ">150"
+      },
+      "coverageItems": {
+        "CQ_SG": {
+          "label": "Singapur/Malaca",
+          "description": "Movimientos de petroleros AIS vs. patrón estacional (día del año).",
+          "cadence": "Agregado cada 10 minutos",
+          "note": "Movimientos de petroleros frente al perfil estacional"
+        },
+        "CQ_TR": {
+          "label": "Estrechos Turcos",
+          "description": "Bósforo y Dardanelos: cierres y tiempos de espera.",
+          "cadence": "Diario",
+          "note": "Duraciones de cierre/espera"
+        },
+        "PORT_EU": {
+          "label": "Rotterdam",
+          "description": "Salidas de petroleros como proxy de flujos europeos.",
+          "cadence": "Diario",
+          "note": "Salidas como proxy de throughput europeo"
+        }
+      },
+      "drivers": {
+        "CQ_SG": {
+          "label": "CQ_SG",
+          "title": "Singapur/Malaca",
+          "tooltip": "Desviación de movimientos de petroleros frente al perfil estacional."
+        },
+        "CQ_TR": {
+          "label": "CQ_TR",
+          "title": "Estrechos Turcos",
+          "tooltip": "Bósforo y Dardanelos: anomalías de cierre y espera."
+        },
+        "PORT_EU": {
+          "label": "PORT_EU",
+          "title": "Rotterdam",
+          "tooltip": "Salidas de petroleros como proxy de flujos de la UE (gris = obsoleto)."
+        }
+      },
+      "freshness": {
+        "fresh": "Fuentes ≤ 6 h",
+        "watch": "Fuentes 6–24 h",
+        "stale": "Fuentes >24 h"
+      },
+      "publish": {
+        "fixed": "Fijación T+1",
+        "indicative": "Indicativo ⚠︎"
+      },
+      "methodology": {
+        "summary": "SPVX-Lite escala tres componentes (CQ_SG, CQ_TR, PORT_EU) mediante z-scores estacionales, winsoriza outliers y los combina en un nivel de estrés logístico. Los pesos priorizan estabilidad y pocas revisiones frente al ajuste a precios.",
+        "interpretation": "+10 puntos ≈ incremento significativo del estrés logístico. Picos en CQ_TR señalan cuellos de botella en el Bósforo; CQ_SG refleja disrupciones en Asia; debilidad en PORT_EU apunta a menores salidas europeas.",
+        "table": {
+          "CQ_SG": {
+            "component": "CQ_SG",
+            "geofence": "Singapur/Malaca",
+            "cadence": "Agregado cada 10 minutos",
+            "note": "Movimientos de petroleros vs. día del año"
+          },
+          "CQ_TR": {
+            "component": "CQ_TR",
+            "geofence": "Estrechos Turcos",
+            "cadence": "Diario",
+            "note": "Cierres y tiempos de espera"
+          },
+          "PORT_EU": {
+            "component": "PORT_EU",
+            "geofence": "Rotterdam",
+            "cadence": "Diario",
+            "note": "Salidas de petroleros como proxy de la UE"
+          }
+        },
+        "quality": "Detección de obsolescencia por componente; contribuciones obsoletas se ponderan automáticamente (0–100 %).",
+        "transparency": {
+          "line1": "Timestamps (as-of) y métricas de revisión (histórico 30 días).",
+          "line2": "Atribución de fuentes (AIS / puertos / meteorología).",
+          "line3": "Changelog metodológico (v1.0 → v1.1 …)."
+        },
+        "disclaimer": "Metodología v1.0 • Nota de transparencia (mensual) • Sin recomendación de inversión."
+      }
+    }
+  },
+  "operations": {
+    "systemHealth": {
+      "title": "Salud del sistema",
+      "status": "Estado",
+      "missing": "Elementos faltantes",
+      "apiBaseUrl": "URL base de la API",
+      "refresh": "Actualización automática cada {{seconds}}s"
+    },
+    "runMeta": {
+      "title": "Metadatos de ejecución",
+      "subtitle": "Últimas ejecuciones del pipeline",
+      "empty": "No hay metadatos disponibles.",
+      "columns": {
+        "step": "Paso",
+        "timestamp": "Marca temporal",
+        "git": "Git SHA",
+        "hash": "Hash de datos"
+      }
+    },
+    "metrics": {
+      "title": "Métricas Prometheus",
+      "subtitle": "Extracción en vivo desde /metrics",
+      "disabled": "Métricas desactivadas en este entorno.",
+      "error": "No fue posible cargar las métricas."
+    }
+  }
+}

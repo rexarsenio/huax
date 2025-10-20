@@ -1,0 +1,198 @@
+{
+  "app": {
+    "title": "SPVX-Lite Operations Dashboard",
+    "subtitle": "Chokepoint signals, spreads & throughput nowcasts.",
+    "footer": "© {{year}} Huax Energy Intelligence. Auto-refresh every few minutes · Data from FastAPI service."
+  },
+  "nav": {
+    "overview": "Overview",
+    "operations": "Ops & Health"
+  },
+  "theme": {
+    "dark": "Dark mode",
+    "light": "Light mode"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "language": "Language"
+  },
+  "status": {
+    "ready": "Ready",
+    "ok": "Healthy",
+    "not_ready": "Not ready",
+    "missing": "Missing"
+  },
+  "dashboard": {
+    "latestIndex": {
+      "title": "Latest Index",
+      "label": "SPVX-Lite level"
+    },
+    "indexPerformance": {
+      "title": "Index Performance",
+      "window": "Last {{days}}d"
+    },
+    "modelActivity": {
+      "title": "Model Activity",
+      "subtitle": "Latest 5 inference events",
+      "spread": "Spread signals",
+      "throughput": "Throughput nowcast",
+      "placeholder": "Awaiting data"
+    },
+    "signals": {
+      "title": "Signals Snapshot",
+      "subtitle": "As of {{datetime}}",
+      "errorTitle": "Unable to load current signals.",
+      "errorBody": "Unable to fetch signals. Please try again.",
+      "degraded": "Degraded mode active. Signals flagged for review.",
+      "spvxLite": "SPVX-Lite",
+      "change": "Daily change",
+      "spread": {
+        "label": "Spread direction",
+        "topDecile": "Top-decile signal",
+        "outside": "Outside decile",
+        "fallback": "Fallback ({{strategy}})",
+        "notAvailable": "Not available"
+      },
+      "throughput": {
+        "label": "Throughput 72h",
+        "mae": "MAE units",
+        "awaiting": "Awaiting model output"
+      },
+      "drivers": "Drivers",
+      "nowcast": {
+        "label": "Nowcast horizon",
+        "date": "Date",
+        "value": "Predicted throughput"
+      }
+    },
+    "meta": {
+      "title": "SPVX-Lite",
+      "error": "Unable to load index metadata.",
+      "ruleOfThumb": "Rule of thumb",
+      "materialMove": "Material move ≥ {{points}} pts",
+      "coverage": "Coverage",
+      "methodologyLink": "Methodology & Transparency",
+      "tableTitle": "Component coverage",
+      "component": "Component",
+      "geofence": "Geofence",
+      "cadence": "Cadence",
+      "note": "Note",
+      "transparency": "Transparency artefacts",
+      "tagline": "SPVX-Lite measures daily uncertainty in maritime oil flows.",
+      "description": "Sources: AIS/port data plus weather adjustments; fixed at 12:00 UTC (T+1).",
+      "ruleOfThumbText": "Rule of thumb: 80–120 normal, 120–150 tense, >150 stress. Moves ≥ +10 pts are material.",
+      "materialMoveLabel": "Material move ≥ {{points}} pts",
+      "band": {
+        "normal": "Normal",
+        "normalRange": "80–120",
+        "tense": "Tense band",
+        "tenseRange": "120–150",
+        "stress": "Stress event",
+        "stressRange": ">150"
+      },
+      "coverageItems": {
+        "CQ_SG": {
+          "label": "Singapore/Malacca",
+          "description": "AIS tanker movements vs day-of-year baseline.",
+          "cadence": "10-minute rollup",
+          "note": "Tanker movements versus seasonal profile."
+        },
+        "CQ_TR": {
+          "label": "Turkish Straits",
+          "description": "Bosphorus & Dardanelles – closure and wait times.",
+          "cadence": "Daily",
+          "note": "Closure and wait durations."
+        },
+        "PORT_EU": {
+          "label": "Rotterdam",
+          "description": "Tanker departures as EU outflow proxy.",
+          "cadence": "Daily",
+          "note": "Departure tallies for EU throughput."
+        }
+      },
+      "drivers": {
+        "CQ_SG": {
+          "label": "CQ_SG",
+          "title": "Singapore/Malacca",
+          "tooltip": "Deviation of tanker movements versus the seasonal profile."
+        },
+        "CQ_TR": {
+          "label": "CQ_TR",
+          "title": "Turkish Straits",
+          "tooltip": "Bosporus & Dardanelles – closure and wait-time anomalies."
+        },
+        "PORT_EU": {
+          "label": "PORT_EU",
+          "title": "Rotterdam",
+          "tooltip": "Tanker departures as EU outflow proxy (grey = stale)."
+        }
+      },
+      "freshness": {
+        "fresh": "Sources ≤ 6 h",
+        "watch": "Sources 6–24 h",
+        "stale": "Sources >24 h"
+      },
+      "publish": {
+        "fixed": "T+1 fix",
+        "indicative": "Indicative ⚠︎"
+      },
+      "methodology": {
+        "summary": "SPVX-Lite scales three components (CQ_SG, CQ_TR, PORT_EU) via seasonal z-scores, winsorises outliers, and combines them into a logistics stress level. Weights favour stability and low revisions over price fit.",
+        "interpretation": "+10 points ≈ significant logistics stress increase. CQ_TR spikes highlight Bosphorus bottlenecks; CQ_SG signals Asia flow disruption; PORT_EU weakness points to reduced EU outflows.",
+        "table": {
+          "CQ_SG": {
+            "component": "CQ_SG",
+            "geofence": "Singapore/Malacca",
+            "cadence": "10-minute rollup",
+            "note": "Tanker movements vs day-of-year baseline"
+          },
+          "CQ_TR": {
+            "component": "CQ_TR",
+            "geofence": "Turkish Straits",
+            "cadence": "Daily",
+            "note": "Bosphorus & Dardanelles closure/wait durations"
+          },
+          "PORT_EU": {
+            "component": "PORT_EU",
+            "geofence": "Rotterdam",
+            "cadence": "Daily",
+            "note": "Tanker departures as EU outflow proxy"
+          }
+        },
+        "quality": "Stale detection per component; stale contributions are down-weighted automatically (0–100%).",
+        "transparency": {
+          "line1": "Timestamps (as-of) and revision metrics (30-day history).",
+          "line2": "Source attribution (AIS / ports / weather).",
+          "line3": "Methodology changelog (v1.0 → v1.1 …)."
+        },
+        "disclaimer": "Methodology v1.0 • Transparency note (monthly) • No investment advice."
+      }
+    }
+  },
+  "operations": {
+    "systemHealth": {
+      "title": "System Health",
+      "status": "Status",
+      "missing": "Missing artifacts",
+      "apiBaseUrl": "API base URL",
+      "refresh": "Auto refresh every {{seconds}}s"
+    },
+    "runMeta": {
+      "title": "Run Metadata",
+      "subtitle": "Latest pipeline executions",
+      "empty": "No run metadata available.",
+      "columns": {
+        "step": "Step",
+        "timestamp": "Timestamp",
+        "git": "Git SHA",
+        "hash": "Data hash"
+      }
+    },
+    "metrics": {
+      "title": "Prometheus Metrics",
+      "subtitle": "Live scrape from /metrics",
+      "disabled": "Metrics disabled in this environment.",
+      "error": "Unable to load metrics stream."
+    }
+  }
+}

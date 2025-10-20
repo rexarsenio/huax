@@ -1,0 +1,54 @@
+groups:
+- name: spvx-lite
+  rules:
+  - alert: AggregationMissed
+    expr: |
+      (time() - spvx_agg_last_epoch)
+        > (2 * on() group_left spvx_config_agg_interval_seconds)
+        or (time() - spvx_agg_last_epoch) > (2 * vector(600))
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: Aggregation missed (>2× interval)
+      description: No successful aggregation in the expected window.
+
+  - alert: JitterHigh
+    expr: avg_over_time(spvx_agg_jitter_ratio[10m]) > 0.10
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Aggregation jitter >10%
+
+  - alert: FreshnessBreach
+    expr: spvx_source_freshness_seconds > 129600
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Source freshness >36h
+
+  - alert: ReadyFail
+    expr: probe_success{job="spvx-ready"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: /ready failing
+
+  - alert: HighMemory
+    expr: process_resident_memory_bytes > 1.5e9
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Resident memory >1.5 GB
+
+  - alert: HighCPU
+    expr: rate(process_cpu_seconds_total[5m]) > 1.5
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: CPU usage >1.5 cores (5m)

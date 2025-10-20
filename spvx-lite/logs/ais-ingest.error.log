@@ -1,0 +1,159 @@
+Traceback (most recent call last):
+  File "/Users/alongo/Desktop/huax/spvx-lite/ingest_aisstream.py", line 615, in <module>
+    asyncio.run(consume())
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/alongo/Desktop/huax/spvx-lite/ingest_aisstream.py", line 533, in consume
+    _start_metrics_server()
+  File "/Users/alongo/Desktop/huax/spvx-lite/ingest_aisstream.py", line 508, in _start_metrics_server
+    start_http_server(METRICS_PORT, addr=METRICS_HOST)
+  File "/Users/alongo/Desktop/huax/spvx-lite/.venv312/lib/python3.12/site-packages/prometheus_client/exposition.py", line 221, in start_wsgi_server
+    httpd = make_server(addr, port, app, TmpServer, handler_class=_SilentHandler)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wsgiref/simple_server.py", line 154, in make_server
+    server = server_class((host, port), handler_class)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/wsgiref/simple_server.py", line 50, in server_bind
+    HTTPServer.server_bind(self)
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/http/server.py", line 136, in server_bind
+    socketserver.TCPServer.server_bind(self)
+  File "/opt/homebrew/Cellar/python@3.12/3.12.12/Frameworks/Python.framework/Versions/3.12/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 48] Address already in use
+2025-10-17 19:06:43,404 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:06:43,407 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:06:43,684 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:06:43,684 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:06:43,889 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:06:43,889 | INFO | WebSocket connected successfully
+2025-10-17 19:07:13,749 | INFO | [DWELL] Upserted 2 window(s); latest window start 2025-10-17 19:00:00
+2025-10-17 19:07:13,760 | INFO | [DWELL] Aggregation overview:
+2025-10-17 19:07:13,761 | INFO |   bosporus: 1 windows, 0 slow vessel observations
+2025-10-17 19:07:13,761 | INFO |   singapore_malacca: 1 windows, 0 slow vessel observations
+2025-10-17 19:07:13,761 | INFO | [DWELL] Latest 5 observations:
+2025-10-17 19:07:13,761 | INFO |   2025-10-17 19:00:00 | singapore_malacca    |   0 slow vessels
+2025-10-17 19:07:13,761 | INFO |   2025-10-17 19:00:00 | bosporus             |   0 slow vessels
+2025-10-17 19:07:13,761 | INFO | [AGG] completed in 0.07s | jitter=0.002s | windows=2
+2025-10-17 19:07:48,111 | INFO | [AIS] Inserted 100 records (received 211 messages)
+2025-10-17 19:08:47,467 | INFO | [AIS] Inserted 200 records (received 409 messages)
+2025-10-17 19:09:44,983 | INFO | [AIS] Inserted 300 records (received 605 messages)
+2025-10-17 19:10:48,844 | INFO | [AIS] Inserted 400 records (received 815 messages)
+2025-10-17 19:11:54,578 | INFO | [AIS] Inserted 500 records (received 1023 messages)
+2025-10-17 19:12:57,300 | INFO | [AIS] Inserted 600 records (received 1210 messages)
+2025-10-17 19:13:51,227 | INFO | [AIS] Inserted 700 records (received 1404 messages)
+2025-10-17 19:15:01,170 | INFO | [AIS] Inserted 800 records (received 1612 messages)
+2025-10-17 19:16:00,918 | INFO | [AIS] Inserted 900 records (received 1800 messages)
+2025-10-17 19:17:08,614 | INFO | [AIS] Inserted 1000 records (received 2016 messages)
+2025-10-17 19:17:13,728 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:17:13,730 | INFO | [AGG] completed in 0.02s | jitter=0.002s | windows=0
+2025-10-17 19:18:17,002 | INFO | [AIS] Inserted 1100 records (received 2224 messages)
+2025-10-17 19:19:20,546 | INFO | [AIS] Inserted 1200 records (received 2421 messages)
+2025-10-17 19:20:16,072 | INFO | [AIS] Inserted 1300 records (received 2607 messages)
+2025-10-17 19:20:27,728 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:20:27,730 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:20:28,444 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:20:28,444 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:20:28,682 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:20:28,683 | INFO | WebSocket connected successfully
+2025-10-17 19:20:58,485 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:20:58,489 | INFO | [AGG] completed in 0.03s | jitter=0.001s | windows=0
+2025-10-17 19:21:33,920 | INFO | [AIS] Inserted 100 records (received 206 messages)
+2025-10-17 19:22:39,660 | INFO | [AIS] Inserted 200 records (received 418 messages)
+2025-10-17 19:23:45,179 | INFO | [AIS] Inserted 300 records (received 619 messages)
+2025-10-17 19:24:55,010 | INFO | [AIS] Inserted 400 records (received 836 messages)
+2025-10-17 19:26:00,628 | INFO | [AIS] Inserted 500 records (received 1049 messages)
+2025-10-17 19:26:53,780 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:26:53,783 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:26:54,641 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:26:54,641 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:26:54,863 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:26:54,863 | INFO | WebSocket connected successfully
+2025-10-17 19:27:24,692 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:27:24,695 | INFO | [AGG] completed in 0.04s | jitter=0.002s | windows=0
+2025-10-17 19:27:47,055 | INFO | Received signal 15; initiating shutdown.
+2025-10-17 19:27:49,040 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:27:49,042 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:27:49,893 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:27:49,893 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:27:50,124 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:27:50,124 | INFO | WebSocket connected successfully
+2025-10-17 19:27:59,382 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:27:59,384 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:28:00,003 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:28:00,003 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:28:00,222 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:28:00,223 | INFO | WebSocket connected successfully
+2025-10-17 19:28:15,232 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:28:15,234 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:28:15,858 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:28:15,858 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:28:16,105 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:28:16,106 | INFO | WebSocket connected successfully
+2025-10-17 19:28:27,102 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:28:27,104 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:28:27,728 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:28:27,728 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:28:27,932 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:28:27,933 | INFO | WebSocket connected successfully
+2025-10-17 19:28:47,293 | INFO | Received signal 15; initiating shutdown.
+2025-10-17 19:29:19,501 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:29:19,504 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:29:20,420 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:29:20,420 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:29:20,644 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:29:20,645 | INFO | WebSocket connected successfully
+2025-10-17 19:29:50,469 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:29:50,470 | INFO | [AGG] completed in 0.04s | jitter=0.002s | windows=0
+2025-10-17 19:30:28,733 | INFO | [AIS] Inserted 100 records (received 199 messages)
+2025-10-17 19:31:32,325 | INFO | [AIS] Inserted 200 records (received 415 messages)
+2025-10-17 19:32:38,120 | INFO | [AIS] Inserted 300 records (received 624 messages)
+2025-10-17 19:33:41,563 | INFO | [AIS] Inserted 400 records (received 841 messages)
+2025-10-17 19:34:46,880 | INFO | [AIS] Inserted 500 records (received 1048 messages)
+2025-10-17 19:35:53,787 | INFO | [AIS] Inserted 600 records (received 1257 messages)
+2025-10-17 19:37:13,373 | INFO | [AIS] Inserted 700 records (received 1501 messages)
+2025-10-17 19:38:26,209 | INFO | [AIS] Inserted 800 records (received 1731 messages)
+2025-10-17 19:39:35,037 | INFO | [AIS] Inserted 900 records (received 1966 messages)
+2025-10-17 19:39:50,486 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:39:50,492 | INFO | [AGG] completed in 0.04s | jitter=0.008s | windows=0
+2025-10-17 19:40:40,775 | INFO | Received signal 15; initiating shutdown.
+2025-10-17 19:40:42,810 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:40:42,812 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:40:43,867 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:40:43,867 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:40:44,196 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:40:44,200 | INFO | WebSocket connected successfully
+2025-10-17 19:41:13,925 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:41:13,927 | INFO | [AGG] completed in 0.05s | jitter=0.003s | windows=0
+2025-10-17 19:41:56,442 | INFO | [AIS] Inserted 100 records (received 214 messages)
+2025-10-17 19:41:57,941 | INFO | Received signal 15; initiating shutdown.
+2025-10-17 19:42:00,536 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:42:00,538 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:42:01,570 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:42:01,570 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:42:01,803 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:42:01,804 | INFO | WebSocket connected successfully
+2025-10-17 19:42:31,606 | INFO | [DWELL] No new time window to process (lower_bound >= upper_bound).
+2025-10-17 19:42:31,608 | INFO | [AGG] completed in 0.02s | jitter=0.001s | windows=0
+2025-10-17 19:42:36,633 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:42:36,635 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:42:37,513 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:42:37,514 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:42:37,742 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:42:37,742 | INFO | WebSocket connected successfully
+2025-10-17 19:42:51,396 | INFO | Received signal 15; initiating shutdown.
+2025-10-17 19:42:52,901 | INFO | Prometheus metrics available on http://0.0.0.0:9108/metrics
+2025-10-17 19:42:52,903 | INFO | Health endpoints available on http://0.0.0.0:9109
+2025-10-17 19:42:53,772 | INFO | Connected to DuckDB at db/spvx.duckdb
+2025-10-17 19:42:53,772 | INFO | Subscribing to chokepoints: singapore_malacca, suez, bosporus, hormuz, panama_n, panama_s
+2025-10-17 19:42:54,093 | INFO | Sending subscription for 6 bounding boxes...
+2025-10-17 19:42:54,093 | INFO | WebSocket connected successfully
+2025-10-17 19:42:54,498 | INFO | Received signal 15; initiating shutdown.

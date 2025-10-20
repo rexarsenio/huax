@@ -1,0 +1,28 @@
+# Environment & secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Node/Vite
+node_modules/
+dashboard/node_modules/
+dashboard/dist/
+*.tsbuildinfo
+
+# Virtual environments
+.venv/
+*/.venv/
+.venv312/
+*/.venv312/
+
+# Data & Database artifacts
+data/
+db/

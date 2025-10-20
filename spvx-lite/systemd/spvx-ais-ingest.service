@@ -1,0 +1,17 @@
+[Unit]
+Description=SPVX AIS Stream Ingestion Service
+After=network.target
+
+[Service]
+Type=simple
+User=alongo
+WorkingDirectory=/Users/alongo/Desktop/huax/spvx-lite
+Environment="PATH=/Users/alongo/Desktop/huax/spvx-lite/.venv312/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/Users/alongo/Desktop/huax/spvx-lite/.venv312/bin/python /Users/alongo/Desktop/huax/spvx-lite/ingest_aisstream.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/spvx-ais-ingest.log
+StandardError=append:/var/log/spvx-ais-ingest.log
+
+[Install]
+WantedBy=multi-user.target
