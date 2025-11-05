@@ -1393,3 +1393,139 @@ def _cached_corridor_view(window: str, cache_time: int) -> str:
     # Import corridor_view logic here
     # This will be called by corridor_view endpoint
     pass
+
+
+@router.get("/gate_weather")
+def gate_weather(
+    window: str = Query("h24", pattern="^(h\\d+|d\\d+)$"),
+    gate_ids: Optional[str] = Query(None, description="Comma-separated gate IDs to filter"),
+) -> Dict[str, Any]:
+    """
+    Get standalone weather data for gates/checkpoints.
+    This endpoint returns weather data independent of ship movements.
+
+    Args:
+        window: Time window (e.g., "h24" for last 24 hours, "d7" for last 7 days)
+        gate_ids: Optional comma-separated list of gate IDs to filter
+
+    Returns:
+        Dictionary with gate weather data including waves, currents, and wind
+    """
+    window = window.lower()
+    now_utc = dt.datetime.utcnow()
+
+    # Parse time window
+    if window.startswith("h"):
+        hours = max(1, int(window[1:]))
+        start_ts = now_utc - dt.timedelta(hours=hours)
+    else:
+        days = max(1, int(window[1:]))
+        start_ts = now_utc - dt.timedelta(days=days)
+
+    with _connect() as con:
+        # Check if table exists
+        table_exists = con.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name ilike 'gate_weather_standalone'"
+        ).fetchone()
+
+        if not table_exists:
+            return {
+                "window": window,
+                "start": start_ts.replace(tzinfo=dt.timezone.utc).isoformat(),
+                "end": now_utc.replace(tzinfo=dt.timezone.utc).isoformat(),
+                "gates": [],
+                "message": "No gate weather data available. Run COLLECT_GATE_WEATHER.sh to collect data.",
+            }
+
+        # Build query with optional gate filter
+        gate_filter_sql = ""
+        params = [start_ts]
+
+        if gate_ids:
+            gate_list = [g.strip() for g in gate_ids.split(",")]
+            placeholders = ",".join("?" * len(gate_list))
+            gate_filter_sql = f"AND gate_id IN ({placeholders})"
+            params.extend(gate_list)
+
+        query = f"""
+            SELECT
+                gate_id,
+                gate_name,
+                basin,
+                observed_at,
+                hs_m,
+                tp_s,
+                dp_deg,
+                wave_flag,
+                u_knots,
+                v_knots,
+                speed_knots,
+                current_flag,
+                wave_source,
+                current_source,
+                collected_at
+            FROM gate_weather_standalone
+            WHERE observed_at >= ?
+            {gate_filter_sql}
+            ORDER BY gate_id, observed_at DESC
+        """
+
+        df = con.execute(query, params).df()
+
+        if df.empty:
+            return {
+                "window": window,
+                "start": start_ts.replace(tzinfo=dt.timezone.utc).isoformat(),
+                "end": now_utc.replace(tzinfo=dt.timezone.utc).isoformat(),
+                "gates": [],
+                "message": "No weather data in the specified time window.",
+            }
+
+        # Group by gate and get latest + aggregated stats
+        gates_data = []
+        for gate_id in df["gate_id"].unique():
+            gate_df = df[df["gate_id"] == gate_id]
+            latest = gate_df.iloc[0]  # Already sorted by observed_at DESC
+
+            gates_data.append({
+                "gate_id": gate_id,
+                "gate_name": latest["gate_name"],
+                "basin": latest["basin"],
+                "latest_observation": {
+                    "observed_at": latest["observed_at"].isoformat() if pd.notna(latest["observed_at"]) else None,
+                    "waves": {
+                        "height_m": float(latest["hs_m"]) if pd.notna(latest["hs_m"]) else None,
+                        "period_s": float(latest["tp_s"]) if pd.notna(latest["tp_s"]) else None,
+                        "direction_deg": float(latest["dp_deg"]) if pd.notna(latest["dp_deg"]) else None,
+                        "flag": int(latest["wave_flag"]) if pd.notna(latest["wave_flag"]) else 0,
+                        "severity": "high" if latest["wave_flag"] == 1 else ("moderate" if pd.notna(latest["hs_m"]) and latest["hs_m"] > 2.0 else "normal"),
+                    },
+                    "currents": {
+                        "u_knots": float(latest["u_knots"]) if pd.notna(latest["u_knots"]) else None,
+                        "v_knots": float(latest["v_knots"]) if pd.notna(latest["v_knots"]) else None,
+                        "speed_knots": float(latest["speed_knots"]) if pd.notna(latest["speed_knots"]) else None,
+                        "flag": int(latest["current_flag"]) if pd.notna(latest["current_flag"]) else 0,
+                        "severity": "high" if latest["current_flag"] == 1 else ("moderate" if pd.notna(latest["speed_knots"]) and latest["speed_knots"] > 2.0 else "normal"),
+                    },
+                },
+                "statistics": {
+                    "samples_count": len(gate_df),
+                    "waves": {
+                        "mean_height_m": float(gate_df["hs_m"].mean()) if not gate_df["hs_m"].isna().all() else None,
+                        "max_height_m": float(gate_df["hs_m"].max()) if not gate_df["hs_m"].isna().all() else None,
+                        "p90_height_m": float(gate_df["hs_m"].quantile(0.9)) if not gate_df["hs_m"].isna().all() else None,
+                    },
+                    "currents": {
+                        "mean_speed_kn": float(gate_df["speed_knots"].mean()) if not gate_df["speed_knots"].isna().all() else None,
+                        "max_speed_kn": float(gate_df["speed_knots"].max()) if not gate_df["speed_knots"].isna().all() else None,
+                        "p90_speed_kn": float(gate_df["speed_knots"].quantile(0.9)) if not gate_df["speed_knots"].isna().all() else None,
+                    },
+                },
+            })
+
+        return {
+            "window": window,
+            "start": start_ts.replace(tzinfo=dt.timezone.utc).isoformat(),
+            "end": now_utc.replace(tzinfo=dt.timezone.utc).isoformat(),
+            "gates": gates_data,
+        }

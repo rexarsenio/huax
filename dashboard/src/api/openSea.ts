@@ -196,3 +196,69 @@ export async function fetchTransit(params: TransitParams): Promise<TransitRespon
   }
   return (await resp.json()) as TransitResponse;
 }
+
+// === Gate Weather (Standalone, Independent of Ship Movements) ===
+
+export interface GateWeatherObservation {
+  observed_at: string | null;
+  waves: {
+    height_m: number | null;
+    period_s: number | null;
+    direction_deg: number | null;
+    flag: number;
+    severity: "high" | "moderate" | "normal";
+  };
+  currents: {
+    u_knots: number | null;
+    v_knots: number | null;
+    speed_knots: number | null;
+    flag: number;
+    severity: "high" | "moderate" | "normal";
+  };
+}
+
+export interface GateWeatherStatistics {
+  samples_count: number;
+  waves: {
+    mean_height_m: number | null;
+    max_height_m: number | null;
+    p90_height_m: number | null;
+  };
+  currents: {
+    mean_speed_kn: number | null;
+    max_speed_kn: number | null;
+    p90_speed_kn: number | null;
+  };
+}
+
+export interface GateWeatherData {
+  gate_id: string;
+  gate_name: string;
+  basin: string;
+  latest_observation: GateWeatherObservation;
+  statistics: GateWeatherStatistics;
+}
+
+export interface GateWeatherResponse {
+  window: string;
+  start: string;
+  end: string;
+  gates: GateWeatherData[];
+  message?: string;
+}
+
+export async function fetchGateWeather(
+  window: string = "h24",
+  gateIds?: string[],
+): Promise<GateWeatherResponse> {
+  const params = new URLSearchParams({ window });
+  if (gateIds && gateIds.length > 0) {
+    params.append("gate_ids", gateIds.join(","));
+  }
+  const url = `${appConfig.apiBaseUrl}/api/open_sea/gate_weather?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!resp.ok) {
+    throw new Error(`gate_weather failed (${resp.status})`);
+  }
+  return (await resp.json()) as GateWeatherResponse;
+}
