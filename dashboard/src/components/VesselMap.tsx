@@ -665,9 +665,10 @@ interface VesselMapProps {
   };
   seaStateByRegion?: Record<string, SeaStateSnapshot>;
   sisDataMap?: Record<string, SISData>;
+  gateWeatherMap?: Record<string, any>;
 }
 
-export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, sisDataMap }: VesselMapProps) => {
+export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, sisDataMap, gateWeatherMap }: VesselMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [corridors, setCorridors] = useState<CorridorFeature[]>([]);
@@ -762,6 +763,10 @@ export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, 
         const sisData = sisDataMap?.[cp.id] ?? sisDataMap?.[cp.name];
         const sisMean = sisData?.sis_mean ?? null;
 
+        // Get gate weather data
+        const gateWeather = gateWeatherMap?.[cp.id] ?? gateWeatherMap?.[cp.name];
+        const gateLatest = gateWeather?.latest;
+
         // Determine color based on SIS level
         let markerColor = 'rgb(239, 68, 68)'; // Default: red
         let glowColor = 'rgba(239, 68, 68, 0.2)';
@@ -825,7 +830,7 @@ export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, 
               <p class="description" style="font-size: 12px; margin-bottom: 12px; opacity: 0.8;">${cp.description}</p>
 
               ${sisMean !== null ? `
-                <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 3px solid ${sisColor};">
+                <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 3px solid ${sisColor}; margin-bottom: 10px;">
                   <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
                     <span style="font-size: 18px;">${sisIcon}</span>
                     <strong style="color: ${sisColor}; font-size: 14px;">${sisLevel}</strong>
@@ -835,7 +840,34 @@ export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, 
                     ${waveP90 !== null && Number.isFinite(waveP90) ? `<p style="margin: 3px 0;"><strong>Wave Height (P90):</strong> ${waveP90.toFixed(1)}m</p>` : ''}
                   </div>
                 </div>
-              ` : '<p style="font-size: 11px; opacity: 0.7;">No weather impact data available</p>'}
+              ` : ''}
+
+              ${gateLatest ? `
+                <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 3px solid #3b82f6;">
+                  <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #3b82f6;">🌊 Current Conditions</div>
+                  ${gateLatest.waves?.height_m !== null && gateLatest.waves?.height_m !== undefined ? `
+                    <div style="font-size: 12px; margin-bottom: 6px;">
+                      <strong>Waves:</strong> ${gateLatest.waves.height_m.toFixed(2)}m
+                      <span style="color: ${gateLatest.waves.severity === 'high' ? '#ef4444' : gateLatest.waves.severity === 'moderate' ? '#f97316' : '#22c55e'};">
+                        (${gateLatest.waves.severity})
+                      </span>
+                    </div>
+                  ` : ''}
+                  ${gateLatest.currents?.speed_knots !== null && gateLatest.currents?.speed_knots !== undefined ? `
+                    <div style="font-size: 12px;">
+                      <strong>Current:</strong> ${gateLatest.currents.speed_knots.toFixed(2)}kn
+                      <span style="color: ${gateLatest.currents.severity === 'high' ? '#ef4444' : gateLatest.currents.severity === 'moderate' ? '#f97316' : '#22c55e'};">
+                        (${gateLatest.currents.severity})
+                      </span>
+                    </div>
+                  ` : ''}
+                  ${gateLatest.observed_at ? `
+                    <div style="font-size: 10px; opacity: 0.7; margin-top: 6px;">
+                      Updated: ${new Date(gateLatest.observed_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  ` : ''}
+                </div>
+              ` : (!sisMean ? '<p style="font-size: 11px; opacity: 0.7;">No weather data available</p>' : '')}
             </div>
           `;
 
@@ -1384,7 +1416,7 @@ export const VesselMap = ({ className = "", initialViewState, seaStateByRegion, 
       features: buildChokepointFeatures(seaStateByRegion, sisDataMap),
     };
     source.setData(data as any);
-  }, [seaStateByRegion, sisDataMap]);
+  }, [seaStateByRegion, sisDataMap, gateWeatherMap]);
 
   // Update corridor data when loaded
   useEffect(() => {

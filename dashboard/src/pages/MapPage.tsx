@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card } from "../components/Card";
 import { VesselMap } from "../components/VesselMap";
 import { SISBadge } from "../components/SISBadge";
-import { useSeaStateSummary, useSignalsSnapshot } from "../hooks/useApi";
+import { useSeaStateSummary, useSignalsSnapshot, useGateWeather } from "../hooks/useApi";
 import { useSISData } from "../hooks/useSISData";
 import { useTranslation } from "react-i18next";
 import huaxLogo from "../assets/landing/huaxlogo.png";
@@ -23,6 +23,9 @@ export const MapPage = () => {
   const { data: bosporusSIS } = useSISData("CHOKEPOINT_BOSPORUS->UNK");
   const { data: hormuzSIS } = useSISData("CHOKEPOINT_HORMUZ->UNK");
   const { data: babElMandebSIS } = useSISData("CHOKEPOINT_BAB_EL_MANDEB->UNK");
+
+  // Fetch standalone gate weather data
+  const { data: gateWeatherData } = useGateWeather("h24");
 
   const seaStateByRegion = useMemo(() => {
     const map: Record<string, { hsZ?: number; oppCurrent?: number; asOf?: string }> = {};
@@ -189,6 +192,46 @@ export const MapPage = () => {
     return Object.keys(map).length > 0 ? map : undefined;
   }, [malaccaSIS, singaporeSIS, suezSIS, gibraltarSIS, bosporusSIS, hormuzSIS, babElMandebSIS]);
 
+  // Build Gate Weather map for the VesselMap
+  const gateWeatherMap = useMemo(() => {
+    if (!gateWeatherData?.gates || gateWeatherData.gates.length === 0) {
+      return undefined;
+    }
+
+    const map: Record<string, any> = {};
+
+    // Map gate IDs to checkpoint IDs
+    const gateIdMapping: Record<string, string[]> = {
+      "GATE_HORMUZ": ["strait-of-hormuz", "Strait of Hormuz"],
+      "GATE_MALACCA": ["strait-of-malacca", "Strait of Malacca"],
+      "GATE_BAB_EL_MANDEB": ["bab-el-mandeb", "Bab el-Mandeb"],
+      "GATE_SUEZ_N": ["suez-canal", "Suez Canal"],
+      "GATE_SUEZ_S": ["suez-canal", "Suez Canal"],
+      "GATE_GIBRALTAR": ["strait-of-gibraltar", "Strait of Gibraltar"],
+      "GATE_BOSPORUS": ["bosporus", "Bosporus Strait"],
+      "GATE_PANAMA": ["panama-canal", "Panama Canal"],
+      "GATE_YUCATAN": ["yucatan-channel", "Yucatan Channel"],
+      "GATE_WEST_AFRICA_BONNY": ["WEST_AFRICA_BONNY", "Bonny Terminal"],
+      "GATE_WEST_AFRICA_ESCRAVOS": ["WEST_AFRICA_ESCRAVOS", "Escravos Offshore"],
+    };
+
+    gateWeatherData.gates.forEach((gate) => {
+      const aliases = gateIdMapping[gate.gate_id] || [gate.gate_id, gate.gate_name];
+      const gateData = {
+        gate_id: gate.gate_id,
+        gate_name: gate.gate_name,
+        latest: gate.latest_observation,
+        statistics: gate.statistics,
+      };
+
+      aliases.forEach((alias) => {
+        map[alias] = gateData;
+      });
+    });
+
+    return Object.keys(map).length > 0 ? map : undefined;
+  }, [gateWeatherData]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center">
@@ -208,6 +251,7 @@ export const MapPage = () => {
           className="h-[600px] rounded-lg overflow-hidden"
           seaStateByRegion={seaStateByRegion}
           sisDataMap={sisDataMap}
+          gateWeatherMap={gateWeatherMap}
         />
       </Card>
 
