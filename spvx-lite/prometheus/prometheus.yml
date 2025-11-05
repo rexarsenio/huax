@@ -1,0 +1,24 @@
+# Prometheus configuration for SPVX Open-Sea monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'spvx-monitor'
+
+scrape_configs:
+  # Open-Sea Consumer metrics
+  - job_name: 'open-sea-consumer'
+    static_configs:
+      - targets: ['host.docker.internal:9110']
+        labels:
+          service: 'open-sea-consumer'
+          environment: 'production'
+    scrape_interval: 10s
+
+  # Optional: Add other SPVX services
+  # - job_name: 'spvx-api'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:8080']
+  #       labels:
+  #         service: 'spvx-api'

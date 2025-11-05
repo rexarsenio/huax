@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Painel operacional SPVX-Lite",
+    "title": "Painel Operacional",
     "subtitle": "Sinais de gargalos, spreads e nowcasts de throughput.",
     "footer": "© {{year}} Huax Energy Intelligence. Atualização automática a cada poucos minutos · Dados do serviço FastAPI."
   },
@@ -22,10 +22,87 @@
     "not_ready": "Não pronto",
     "missing": "Faltando"
   },
+  "refresh": {
+    "asOf": "Atualizado às {{datetime}}",
+    "auto": "Auto-atualização ✓",
+    "intervalMinutes": "{{minutes}} min",
+    "intervalSeconds": "{{seconds}} s",
+    "stale": "Desatualizado desde {{datetime}}"
+  },
   "dashboard": {
     "latestIndex": {
       "title": "Índice mais recente",
-      "label": "Nível SPVX-Lite"
+      "label": "Nível SPVX-Lite",
+      "subtitle": "Atualizado em {{datetime}}",
+      "loading": "Carregando a última captura…",
+      "unavailable": "Captura indisponível no momento.",
+      "retryHint": "Verifique a ingestão ou tente novamente em instantes.",
+      "statusUnknown": "Status indisponível",
+      "seasonalBaseline": "Baseline sazonal {{value}}",
+      "scopeLabel": "Escopo: {{scope}}",
+      "seasonalSummary": "{{zScore}} · {{percentile}} percentil",
+      "zScore": "Z-score",
+      "zScoreLabel": "{{value}}σ",
+      "percentile": "Percentil",
+      "baseline": "Base sazonal",
+      "deviation": "Desvio vs sazonal",
+      "history": "Contexto sazonal recente",
+      "contextUnavailable": "Contexto sazonal indisponível. Aguardando calibração da linha base.",
+      "staleSubtitle": "Captura desatualizada · último fix {{datetime}}",
+      "tiles": {
+        "spvxToday": "SPVX (hoje)",
+        "percentile70d": "Percentil (70d)",
+        "percentileWindow": "Últimos 70 dias",
+        "deltaDay": "Δ vs dia anterior",
+        "points": "pts",
+        "noDelta": "Aguardando janela de variação"
+      }
+    },
+    "openSeaSummary": {
+      "title": "Gargalos (24h)",
+      "asOf": "Atualizado em {{datetime}}",
+      "filterAll": "Todos os gargalos",
+      "filters": {
+        "westAfricaBonny": "África Ocidental · Bonny",
+        "westAfricaEscravos": "África Ocidental · Escravos",
+        "westAfricaGulf": "África Ocidental · Corredor do Golfo"
+      },
+      "error": "Não foi possível carregar o resumo de gargalos.",
+      "empty": "Nenhuma travessia nesta janela. Tente um intervalo maior.",
+      "headers": {
+        "corridor": "Corredor",
+        "throughput": "Fluxo 24h",
+        "fluxZ": "Z do fluxo",
+        "delay": "Relação de atraso",
+        "sis": "SIS p90"
+      },
+      "stale": "Captura desatualizada · última atualização {{datetime}}"
+    },
+    "openSea": {
+      "staleGate": "Fluxo desatualizado desde {{datetime}}",
+      "staleSis": "Dados SIS desatualizados desde {{datetime}}",
+      "gateFluxPending": "O acompanhamento do fluxo para este corredor da África Ocidental aparecerá após a próxima agregação noturna."
+    },
+    "gauge": {
+      "seasonalRatio": "Relação sazonal",
+      "baselineHint": "Baseline: {{value}} → 100%",
+      "baselineUnavailable": "Base indisponível",
+      "degraded": "Degradado",
+      "degradedTooltip": "Métricas de ingestão em alerta (gap >10% ou lag >15 min).",
+      "levelLabel": "Índice {{value}}",
+      "zScoreLabel": "Z-score",
+      "zone": {
+        "quiet": "Abaixo do sazonal",
+        "normal": "Faixa sazonal",
+        "elevated": "Pressão elevada",
+        "hot": "Congestão crítica",
+        "na": "Sem baseline"
+      }
+    },
+    "marketContext": {
+      "title": "Contexto de mercado",
+      "subtitle": "Preços Brent & WTI (diário, EIA/FRED)",
+      "disclaimer": "Apenas contexto"
     },
     "indexPerformance": {
       "title": "Desempenho do índice",
@@ -44,15 +121,19 @@
       "errorTitle": "Não foi possível carregar os sinais atuais.",
       "errorBody": "Não foi possível buscar os sinais. Tente novamente.",
       "degraded": "Modo degradado ativo. Revisar os sinais.",
+      "reasons": "Notas de degradação",
+      "fallback": "Entradas de fallback",
+      "qualityChecks": "Verificações de qualidade",
       "spvxLite": "SPVX-Lite",
       "change": "Variação diária",
-  "spread": {
-    "label": "Direção do spread",
-    "topDecile": "Sinal no decil superior",
-    "outside": "Fora do decil",
-    "fallback": "Fallback ({{strategy}})",
-    "notAvailable": "Indisponível"
-  },
+      "spread": {
+        "label": "Direção do spread",
+        "topDecile": "Sinal no decil superior",
+        "outside": "Fora do decil",
+        "model": "Sinal do modelo",
+        "fallback": "Fallback ({{strategy}})",
+        "notAvailable": "Indisponível"
+      },
       "throughput": {
         "label": "Throughput 72h",
         "mae": "MAE (unidades)",
@@ -108,6 +189,24 @@
           "description": "Partidas de petroleiros como proxy de fluxos da UE.",
           "cadence": "Diário",
           "note": "Partidas como proxy de throughput europeu"
+        },
+        "CQ_SUEZ": {
+          "label": "Canal de Suez",
+          "description": "Tempo de permanência de petroleiros AIS no ponto de estrangulamento de Suez.",
+          "cadence": "Agregado a cada 10 minutos",
+          "note": "Petroleiros de movimento lento vs. perfil sazonal"
+        },
+        "CQ_GIBRALTAR": {
+          "label": "Estreito de Gibraltar",
+          "description": "Tempo de permanência de petroleiros AIS no estreito de Gibraltar.",
+          "cadence": "Agregado a cada 10 minutos",
+          "note": "Petroleiros de movimento lento vs. perfil sazonal"
+        },
+        "PORT_MED": {
+          "label": "Portos Mediterrâneos",
+          "description": "Partidas de petroleiros dos principais portos mediterrâneos.",
+          "cadence": "Diário",
+          "note": "Partidas como proxy de throughput mediterrâneo"
         }
       },
       "drivers": {
@@ -125,6 +224,21 @@
           "label": "PORT_EU",
           "title": "Roterdão",
           "tooltip": "Partidas de petroleiros como proxy dos fluxos da UE (cinzento = stale)."
+        },
+        "CQ_SUEZ": {
+          "label": "CQ_SUEZ",
+          "title": "Canal de Suez",
+          "tooltip": "Congestão de petroleiros no Canal de Suez."
+        },
+        "CQ_GIBRALTAR": {
+          "label": "CQ_GIBRALTAR",
+          "title": "Estreito de Gibraltar",
+          "tooltip": "Congestão de petroleiros no Estreito de Gibraltar."
+        },
+        "PORT_MED": {
+          "label": "PORT_MED",
+          "title": "Portos Mediterrâneos",
+          "tooltip": "Partidas de petroleiros dos portos-chave do Mediterrâneo (Augusta, Gioia Tauro, Lavera, Pireu)."
         }
       },
       "freshness": {
@@ -157,6 +271,24 @@
             "geofence": "Roterdão",
             "cadence": "Diário",
             "note": "Partidas de petroleiros como proxy da UE"
+          },
+          "CQ_SUEZ": {
+            "component": "CQ_SUEZ",
+            "geofence": "Canal de Suez",
+            "cadence": "Agregado a cada 10 minutos",
+            "note": "Tempo de permanência de petroleiros vs. perfil sazonal"
+          },
+          "CQ_GIBRALTAR": {
+            "component": "CQ_GIBRALTAR",
+            "geofence": "Estreito de Gibraltar",
+            "cadence": "Agregado a cada 10 minutos",
+            "note": "Tempo de permanência de petroleiros vs. perfil sazonal"
+          },
+          "PORT_MED": {
+            "component": "PORT_MED",
+            "geofence": "Portos Mediterrâneos",
+            "cadence": "Diário",
+            "note": "Partidas de petroleiros de Augusta, Gioia Tauro, Lavera, Pireu"
           }
         },
         "quality": "Deteção de stale por componente; contribuições obsoletas são reponderadas automaticamente (0–100%).",

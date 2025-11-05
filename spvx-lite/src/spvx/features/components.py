@@ -61,7 +61,7 @@ def _mpa_components(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """
     df = con.execute(query).df()
     if df.empty:
-        return df
+        return _dwell_proxy_component(con, region="singapore_port", column="CQ_SG")
     df["CQ_SG"] = winsorize(zscore_doy(df, "tanker_moves", "date"))
     return df[["date", "CQ_SG"]]
 
@@ -78,7 +78,10 @@ def _rotterdam_components(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """
     df = con.execute(query).df()
     if df.empty:
-        return df
+        fallback = _dwell_proxy_component(con, region="rotterdam_port", column="PORT_EU")
+        if fallback.empty:
+            return fallback
+        return fallback
     df["PORT_EU"] = winsorize(-zscore_doy(df, "dep_tankers", "date"))
     return df[["date", "PORT_EU"]]
 
@@ -102,6 +105,26 @@ def _portstays_components(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         return df
     df["PORT_EU"] = winsorize(-zscore_doy(df, "tanker_departures", "date"))
     return df[["date", "PORT_EU"]]
+
+
+def _dwell_proxy_component(con: duckdb.DuckDBPyConnection, *, region: str, column: str) -> pd.DataFrame:
+    """
+    Build a component proxy directly from AIS dwell windows for a given region.
+    """
+    query = """
+        select
+            date(window_start) as date,
+            sum(slow_count) as slow_count
+        from dwell_10m
+        where region = ?
+        group by 1
+        order by 1
+    """
+    df = con.execute(query, [region]).df()
+    if df.empty:
+        return df
+    df[column] = winsorize(zscore_doy(df, "slow_count", "date"))
+    return df[["date", column]]
 
 
 def _ais_dwell_components(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -157,7 +180,12 @@ def _sea_state_components(chokepoint_id: str) -> pd.DataFrame:
 
     # Resample to daily (mean of sub-daily observations)
     daily = ss.resample("1D").mean().reset_index()
-    daily["date"] = daily["time"].dt.date
+    # Keep the date column as timezone-naive pandas datetime so merges align on dtype.
+    floored = daily["time"].dt.floor("D")
+    tz = getattr(floored.dt, "tz", None)
+    if tz is not None:
+        floored = floored.dt.tz_convert("UTC").dt.tz_localize(None)
+    daily["date"] = floored.astype("datetime64[ns]")
     daily = daily.drop(columns=["time"])
 
     # Compute seasonal Z-score for wave height
@@ -198,7 +226,10 @@ def _seasonal_z_score(df: pd.DataFrame, col: str, date_col: str) -> pd.Series:
     return z.fillna(0.0)
 
 
-def build_components(output_path: str | Path = "data/processed/components.parquet") -> Path:
+def build_components(
+    output_path: str | Path = "data/processed/components.parquet",
+    include_sea_state: bool = True,
+) -> Path:
     """
     Compute component features and persist them as a Parquet dataset.
     """
@@ -206,7 +237,7 @@ def build_components(output_path: str | Path = "data/processed/components.parque
     cq_tr = _turkish_components(con)
     cq_sg = _mpa_components(con)
     port_eu = _portstays_components(con)
-    if port_eu.empty:
+    if port_eu.empty or port_eu["PORT_EU"].dropna().nunique() <= 1:
         port_eu = _rotterdam_components(con)
     ais_dwell = _ais_dwell_components(con)
 
@@ -224,18 +255,27 @@ def build_components(output_path: str | Path = "data/processed/components.parque
 
     # Attach sea-state components (optional, per chokepoint)
     # For now, we'll compute a composite sea-state signal across all chokepoints
-    sea_state_dfs = []
-    for cid in ["CQ_SG", "CQ_TR", "PORT_EU"]:
-        ss_df = _sea_state_components(cid)
-        if not ss_df.empty:
-            sea_state_dfs.append(ss_df)
+    if include_sea_state:
+        sea_state_dfs = []
+        for cid in ["CQ_SG", "CQ_TR", "PORT_EU"]:
+            ss_df = _sea_state_components(cid)
+            if not ss_df.empty:
+                sea_state_dfs.append(ss_df)
 
-    if sea_state_dfs:
-        # Average sea-state signals across chokepoints
-        ss_combined = pd.concat(sea_state_dfs).groupby("date").mean().reset_index()
-        df = df.merge(ss_combined, on="date", how="left")
+        if sea_state_dfs:
+            # Average sea-state signals across chokepoints
+            ss_combined = pd.concat(sea_state_dfs).groupby("date").mean().reset_index()
+            df = df.merge(ss_combined, on="date", how="left")
 
-    df = df.sort_values("date").ffill().dropna()
+    df = df.sort_values("date").ffill()
+    optional_cols = ["CQ_SG_AIS", "CQ_SUEZ", "CQ_BOSPORUS", "CQ_HORMUZ", "CQ_CHOKE", "SEA_HS_Z", "OPPOSING_CURRENT"]
+    for col in optional_cols:
+        if col not in df.columns:
+            df[col] = 0.0
+        else:
+            df[col] = df[col].fillna(0.0)
+    required_cols = ["CQ_TR", "CQ_SG", "PORT_EU"]
+    df = df.dropna(subset=required_cols)
 
     df = validate_components(df)
     out_path = Path(output_path)

@@ -19,6 +19,9 @@ pyyaml>=6.0
 xarray>=2024.3
 netCDF4>=1.7
 pydap>=3.4
+shapely>=2.0
+pyproj>=3.6
+websockets>=12.0
 
 [dev]
 pytest>=8.0

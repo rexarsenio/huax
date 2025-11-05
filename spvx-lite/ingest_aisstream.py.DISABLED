@@ -34,6 +34,11 @@ from prometheus_client import Counter, Gauge, Summary, start_http_server
 from aggregate_dwell import AggregationResult, run_aggregation
 from chokepoints import CHOKEPOINTS, bounding_boxes
 from spvx.ingest.canonicalize import canonicalize
+from spvx.ingest.ship_registry import (
+    create_ship_registry_table,
+    extract_ship_static_data,
+    upsert_ship_registry,
+)
 
 load_dotenv()
 
@@ -93,8 +98,10 @@ SOURCE_FRESHNESS = Gauge(
 )
 INGEST_RAW_MESSAGES = Counter("spvx_ingest_raw_msgs_total", "Total AIS messages received from the stream.")
 INGEST_CANON_MESSAGES = Counter("spvx_ingest_canon_msgs_total", "Total canonical AIS messages stored.")
+INGEST_SHIP_REGISTRY_UPDATES = Counter("spvx_ingest_ship_registry_updates_total", "Total ship registry updates from Message Type 5.")
 INGEST_UNIQUE_MMSI_5M = Gauge("spvx_ingest_unique_mmsi_5m", "Distinct MMSI observed in the last five minutes.")
 INGEST_TANKER_SHARE_5M = Gauge("spvx_ingest_tanker_share_5m", "Share of canonical messages flagged as tankers in the last five minutes.")
+SHIP_REGISTRY_SIZE = Gauge("spvx_ship_registry_size", "Total number of vessels in ship registry.")
 
 METRICS_STARTED = False
 
@@ -234,6 +241,8 @@ def _ensure_db() -> duckdb.DuckDBPyConnection:
         WHERE mmsi IN (SELECT mmsi FROM ais_golden_mmsi)
         """
     )
+    # Create ship registry table
+    create_ship_registry_table(con)
     return con
 
 
@@ -276,6 +285,14 @@ def _refresh_ingest_metrics(con: duckdb.DuckDBPyConnection) -> None:
     INGEST_UNIQUE_MMSI_5M.set(unique or 0)
     INGEST_TANKER_SHARE_5M.set(share)
 
+    # Update ship registry size
+    try:
+        registry_size = con.execute("SELECT COUNT(*) FROM ship_registry").fetchone()[0]
+        SHIP_REGISTRY_SIZE.set(registry_size or 0)
+    except Exception:
+        # Table might not exist yet
+        pass
+
 
 async def _process_messages(
     ws,
@@ -286,6 +303,7 @@ async def _process_messages(
     """Process incoming WebSocket messages and insert into database."""
     msg_count = 0
     insert_count = 0
+    registry_updates = 0
 
     async for raw in ws:
         if stop_event.is_set():
@@ -302,16 +320,35 @@ async def _process_messages(
             LOG.debug("Message #%s: %s", msg_count, json.dumps(payload)[:500])
 
         message = payload.get("Message") or {}
-        msg_type = payload.get("MessageType", "")
+        msg_type = message.get("MessageType") or message.get("msgType")
 
-        if msg_type == "PositionReport":
+        # Handle Message Type 5 (Ship Static Data)
+        if msg_type == 5:
+            ship_data = extract_ship_static_data(payload)
+            if ship_data:
+                async with lock:
+                    upsert_ship_registry(con, ship_data)
+                    INGEST_SHIP_REGISTRY_UPDATES.inc()
+                    registry_updates += 1
+                    if registry_updates % 10 == 0:
+                        con.commit()
+                        LOG.info(
+                            "[REGISTRY] Updated %s vessels (received %s messages)",
+                            registry_updates,
+                            msg_count,
+                        )
+            continue  # Don't process as position report
+
+        # Handle Position Reports (Message Types 1, 2, 3)
+        msg_type_str = payload.get("MessageType", "")
+        if msg_type_str == "PositionReport":
             data = message.get("PositionReport") or {}
         elif "PositionReport" in message:
             data = message.get("PositionReport")
         else:
             data = message
 
-        canonical = canonicalize(payload)
+        canonical = canonicalize(payload, con)
         if canonical is None:
             continue
 

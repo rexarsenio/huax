@@ -11,6 +11,8 @@ import type {
   ThroughputNowcastResponse,
   RunMeta,
   IndexMeta,
+  LatestIndexSnapshot,
+  ChokepointSummaryResponse,
 } from "./types";
 
 const api = axios.create({
@@ -19,7 +21,7 @@ const api = axios.create({
 });
 
 export const fetchGlobalIndex = async (range = "90d"): Promise<GlobalIndexResponse> => {
-  const { data } = await api.get<GlobalIndexResponse>("/api/index/global", { params: { range } });
+  const { data } = await api.get<GlobalIndexResponse>("/api/index/v1_5", { params: { range } });
   return data;
 };
 
@@ -48,6 +50,20 @@ export const fetchSpreadSignals = async (): Promise<SpreadSignalsResponse> => {
 
 export const fetchThroughputNowcast = async (): Promise<ThroughputNowcastResponse> => {
   const { data } = await api.get<ThroughputNowcastResponse>("/throughput-nowcast", { params: { days: 90 } });
+  return data;
+};
+
+export const fetchLatestIndex = async (scope = "global"): Promise<LatestIndexSnapshot> => {
+  const { data } = await api.get<LatestIndexSnapshot>("/api/index/latest", { params: { scope } });
+  return data;
+};
+
+export const fetchChokepointSummary = async (window = "h24", gate?: string): Promise<ChokepointSummaryResponse> => {
+  const params: Record<string, string> = { window };
+  if (gate && gate !== "ALL") {
+    params.gate = gate;
+  }
+  const { data } = await api.get<ChokepointSummaryResponse>("/api/open_sea/summary", { params });
   return data;
 };
 

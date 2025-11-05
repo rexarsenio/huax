@@ -13,7 +13,10 @@ import duckdb
 import numpy as np
 import xarray as xr
 
-from chokepoints import CHOKEPOINTS
+try:
+    from chokepoints import CHOKEPOINTS
+except ImportError:
+    CHOKEPOINTS = {}
 from spvx.db import ensure_core_tables
 
 LOG = logging.getLogger("spvx.weather.sea_state")

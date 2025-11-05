@@ -4,6 +4,9 @@ import { useHealthStatus, useMetrics, useRunMeta, useOpsHealth } from "../hooks/
 import { appConfig } from "../config";
 import { WarningIcon } from "../components/icons";
 import { useTranslation } from "react-i18next";
+import { RegistryPanel } from "../components/RegistryPanel";
+import { SISBadge } from "../components/SISBadge";
+import { useSISData } from "../hooks/useSISData";
 
 export const OperationsPage = () => {
   const { data: health } = useHealthStatus();
@@ -11,6 +14,11 @@ export const OperationsPage = () => {
   const { data: runMeta, isLoading: runMetaLoading } = useRunMeta();
   const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useMetrics();
   const { t, i18n } = useTranslation();
+
+  // Fetch SIS data for key chokepoints
+  const { data: malaccaSIS } = useSISData("CHOKEPOINT_MALACCA->UNK");
+  const { data: singaporeSIS } = useSISData("CHOKEPOINT_SINGAPORE_STRAIT->UNK");
+  const { data: suezSIS } = useSISData("CHOKEPOINT_SUEZ_NORTH->UNK");
   const locale = i18n.language;
   const formatTimestamp = (ts?: string) => (ts ? new Date(ts).toLocaleString(locale) : "—");
   const isReady = opsHealth?.ready ?? (health?.status === "ready");
@@ -22,12 +30,14 @@ export const OperationsPage = () => {
     : undefined;
 
   return (
-    <div className="space-y-6">
-      <Card title={t("operations.systemHealth.title")}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-foreground/60">{t("operations.systemHealth.status")}</p>
-            <p className="text-lg font-semibold">{translatedStatus}</p>
+    <div className="space-y-8 max-w-[1600px] mx-auto">
+      <RegistryPanel />
+
+      <Card title={t("operations.systemHealth.title")} variant="elevated">
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="rounded-lg border border-border/60 bg-background-elevated p-5 shadow-sm hover:shadow-md transition-all">
+            <p className="text-sm uppercase tracking-wider text-foreground/70 font-semibold mb-3">{t("operations.systemHealth.status")}</p>
+            <p className="text-2xl font-bold mb-3">{translatedStatus}</p>
             {health?.missing && health.missing.length > 0 && (
               <p className="mt-2 text-sm text-warning">
                 {t("operations.systemHealth.missing")}: {health.missing.join(", ")}
@@ -44,19 +54,19 @@ export const OperationsPage = () => {
               </p>
             )}
           </div>
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-foreground/60">{t("operations.systemHealth.apiBaseUrl")}</p>
-            <p className="text-lg font-semibold">{appConfig.apiBaseUrl}</p>
-            <p className="mt-2 text-sm text-foreground/60">
+          <div className="rounded-lg border border-border/60 bg-background-elevated p-5 shadow-sm hover:shadow-md transition-all">
+            <p className="text-sm uppercase tracking-wider text-foreground/70 font-semibold mb-3">{t("operations.systemHealth.apiBaseUrl")}</p>
+            <p className="text-lg font-bold mb-2 text-accent break-all">{appConfig.apiBaseUrl}</p>
+            <p className="text-sm text-foreground/70 font-medium">
               {t("operations.systemHealth.refresh", { seconds: appConfig.refreshSeconds })}
             </p>
           </div>
         </div>
         {opsHealth && (
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-foreground/60">{t("operations.systemHealth.componentsHeading", { defaultValue: "Components" })}</p>
-              <ul className="mt-2 space-y-1 text-sm text-foreground/70">
+          <div className="mt-6 grid gap-5 md:grid-cols-3">
+            <div className="rounded-lg border border-border/60 bg-background-elevated p-5 shadow-sm hover:shadow-md transition-all">
+              <p className="text-sm uppercase tracking-wider text-foreground/70 font-semibold mb-4">{t("operations.systemHealth.componentsHeading", { defaultValue: "Components" })}</p>
+              <ul className="space-y-2.5 text-sm text-foreground/80 font-medium">
                 {componentsPresent.length > 0
                   ? componentsPresent.map(([key, value]) => (
                       <li key={key}>
@@ -68,9 +78,9 @@ export const OperationsPage = () => {
                     )}
               </ul>
             </div>
-            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-foreground/60">{t("operations.systemHealth.coverageHeading", { defaultValue: "30d coverage" })}</p>
-              <ul className="mt-2 space-y-1 text-sm text-foreground/70">
+            <div className="rounded-lg border border-border/60 bg-background-elevated p-5 shadow-sm hover:shadow-md transition-all">
+              <p className="text-sm uppercase tracking-wider text-foreground/70 font-semibold mb-4">{t("operations.systemHealth.coverageHeading", { defaultValue: "30d coverage" })}</p>
+              <ul className="space-y-2.5 text-sm text-foreground/80 font-medium">
                 {coverageEntries.length > 0
                   ? coverageEntries.map(([key, value]) => (
                       <li key={key}>
@@ -82,52 +92,76 @@ export const OperationsPage = () => {
                     )}
               </ul>
             </div>
-            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-foreground/60">{t("dashboard.weather.flag", { defaultValue: "Weather flags" })}</p>
-              <ul className="mt-2 space-y-1 text-sm text-foreground/70">
-                {Object.entries(opsHealth.weather_flags ?? {}).length > 0
-                  ? Object.entries(opsHealth.weather_flags ?? {}).map(([key, value]) => (
-                      <li key={key}>
-                        {key}: {value != null && Number(value) > 0 ? t("dashboard.weather.active", { defaultValue: "active" }) : t("dashboard.weather.clear", { defaultValue: "clear" })}
-                      </li>
-                    ))
-                  : (
-                      <li>{t("dashboard.weather.noData", { defaultValue: "No weather data." })}</li>
-                    )}
-              </ul>
+            <div className="rounded-lg border border-border/60 bg-background-elevated p-5 shadow-sm hover:shadow-md transition-all">
+              <p className="text-sm uppercase tracking-wider text-foreground/70 font-semibold mb-4">{t("operations.seaState.title", { defaultValue: "Sea State Conditions" })}</p>
+              <div className="space-y-3">
+                {malaccaSIS?.latest && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground/80 font-medium">Malacca Strait</span>
+                    <SISBadge
+                      sis={malaccaSIS.latest.sis_mean}
+                      waveHeight={malaccaSIS.latest.we_p90_m}
+                      corridor="Malacca"
+                    />
+                  </div>
+                )}
+                {singaporeSIS?.latest && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground/80 font-medium">Singapore Strait</span>
+                    <SISBadge
+                      sis={singaporeSIS.latest.sis_mean}
+                      waveHeight={singaporeSIS.latest.we_p90_m}
+                      corridor="Singapore"
+                    />
+                  </div>
+                )}
+                {suezSIS?.latest && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground/80 font-medium">Suez Canal</span>
+                    <SISBadge
+                      sis={suezSIS.latest.sis_mean}
+                      waveHeight={suezSIS.latest.we_p90_m}
+                      corridor="Suez"
+                    />
+                  </div>
+                )}
+                {!malaccaSIS?.latest && !singaporeSIS?.latest && !suezSIS?.latest && (
+                  <p className="text-sm text-foreground/60">{t("operations.seaState.noData", { defaultValue: "No sea state data available." })}</p>
+                )}
+              </div>
             </div>
           </div>
         )}
       </Card>
 
-      <Card title={t("operations.runMeta.title")} subtitle={t("operations.runMeta.subtitle")}>
+      <Card title={t("operations.runMeta.title")} subtitle={t("operations.runMeta.subtitle")} variant="elevated">
         {runMetaLoading && <Skeleton className="h-40 w-full" />}
         {!runMetaLoading && !runMeta && (
-          <div className="flex items-center gap-2 text-sm text-warning">
+          <div className="flex items-center gap-3 text-sm text-warning bg-warning/10 border border-warning/30 rounded-lg p-4">
             <WarningIcon className="h-5 w-5" />
-            {t("operations.runMeta.empty")}
+            <span className="font-medium">{t("operations.runMeta.empty")}</span>
           </div>
         )}
         {runMeta && (
-          <div className="overflow-x-auto rounded-xl border border-foreground/10">
-            <table className="min-w-full divide-y divide-foreground/10 text-sm">
-              <thead className="bg-foreground/5 text-foreground/70">
+          <div className="overflow-x-auto rounded-lg border border-border/60 shadow-sm">
+            <table className="min-w-full divide-y divide-border/40 text-sm">
+              <thead className="bg-background-secondary text-foreground/80">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">{t("operations.runMeta.columns.step")}</th>
-                  <th className="px-3 py-2 text-left font-medium">{t("operations.runMeta.columns.timestamp")}</th>
-                  <th className="px-3 py-2 text-left font-medium">{t("operations.runMeta.columns.git")}</th>
-                  <th className="px-3 py-2 text-left font-medium">{t("operations.runMeta.columns.hash")}</th>
+                  <th className="px-4 py-3.5 text-left font-bold uppercase tracking-wider text-xs">{t("operations.runMeta.columns.step")}</th>
+                  <th className="px-4 py-3.5 text-left font-bold uppercase tracking-wider text-xs">{t("operations.runMeta.columns.timestamp")}</th>
+                  <th className="px-4 py-3.5 text-left font-bold uppercase tracking-wider text-xs">{t("operations.runMeta.columns.git")}</th>
+                  <th className="px-4 py-3.5 text-left font-bold uppercase tracking-wider text-xs">{t("operations.runMeta.columns.hash")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-foreground/10">
+              <tbody className="divide-y divide-border/30 bg-background-elevated">
                 {Object.entries(runMeta).map(([step, payload]) => (
-                  <tr key={step}>
-                    <td className="px-3 py-2 font-medium">{step}</td>
-                    <td className="px-3 py-2">{formatTimestamp(payload.ts as string | undefined)}</td>
-                    <td className="px-3 py-2">
-                      <code className="rounded bg-foreground/10 px-2 py-1 text-xs">{(payload.git as string | undefined) ?? "—"}</code>
+                  <tr key={step} className="hover:bg-background-secondary/50 transition-colors">
+                    <td className="px-4 py-3.5 font-bold text-foreground">{step}</td>
+                    <td className="px-4 py-3.5 text-foreground/80 font-medium">{formatTimestamp(payload.ts as string | undefined)}</td>
+                    <td className="px-4 py-3.5">
+                      <code className="rounded-md bg-accent/10 border border-accent/20 px-3 py-1.5 text-xs font-mono text-accent">{(payload.git as string | undefined) ?? "—"}</code>
                     </td>
-                    <td className="px-3 py-2">{payload.data_hash ? (payload.data_hash as number) : "—"}</td>
+                    <td className="px-4 py-3.5 font-mono text-foreground/70">{payload.data_hash ? (payload.data_hash as number) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -136,18 +170,18 @@ export const OperationsPage = () => {
         )}
       </Card>
 
-      <Card title={t("operations.metrics.title")} subtitle={appConfig.enableMetrics ? t("operations.metrics.subtitle") : t("operations.metrics.disabled")}>
+      <Card title={t("operations.metrics.title")} subtitle={appConfig.enableMetrics ? t("operations.metrics.subtitle") : t("operations.metrics.disabled")} variant="elevated">
         {!appConfig.enableMetrics ? (
-          <p className="text-sm text-foreground/60">{t("operations.metrics.disabled")}</p>
+          <p className="text-sm text-foreground/70 font-medium">{t("operations.metrics.disabled")}</p>
         ) : metricsLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : metricsError ? (
-          <div className="flex items-center gap-2 text-sm text-warning">
+          <div className="flex items-center gap-3 text-sm text-warning bg-warning/10 border border-warning/30 rounded-lg p-4">
             <WarningIcon className="h-5 w-5" />
-            {t("operations.metrics.error")}
+            <span className="font-medium">{t("operations.metrics.error")}</span>
           </div>
         ) : (
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-foreground/10 bg-foreground/5 p-4 text-xs leading-relaxed">
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-background-secondary/50 p-5 text-xs leading-relaxed font-mono shadow-inner">
             {metrics}
           </pre>
         )}

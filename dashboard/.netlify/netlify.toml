@@ -1,0 +1,39 @@
+plugins = []
+headers = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/alongo/Desktop/huax/dashboard/dist"
+publishOrigin = "ui"
+commandOrigin = "ui"
+base = "/Users/alongo/Desktop/huax/dashboard"
+command = "yarn run build"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

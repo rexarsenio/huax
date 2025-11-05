@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "SPVX-Lite Operations Dashboard",
+    "title": "Operations Dashboard",
     "subtitle": "Chokepoint signals, spreads & throughput nowcasts.",
     "footer": "© {{year}} Huax Energy Intelligence. Auto-refresh every few minutes · Data from FastAPI service."
   },
@@ -22,10 +22,62 @@
     "not_ready": "Not ready",
     "missing": "Missing"
   },
+  "refresh": {
+    "asOf": "As of {{datetime}}",
+    "auto": "Auto-refresh ✓",
+    "intervalMinutes": "{{minutes}} min",
+    "intervalSeconds": "{{seconds}} s",
+    "stale": "Stale since {{datetime}}"
+  },
   "dashboard": {
     "latestIndex": {
       "title": "Latest Index",
-      "label": "SPVX-Lite level"
+      "label": "SPVX-Lite level",
+      "subtitle": "As of {{datetime}}",
+      "loading": "Loading latest snapshot…",
+      "unavailable": "Latest snapshot unavailable.",
+      "retryHint": "Check ingestion or retry shortly.",
+      "statusUnknown": "Status unavailable",
+      "seasonalBaseline": "Seasonal baseline {{value}}",
+      "scopeLabel": "Scope: {{scope}}",
+      "seasonalSummary": "{{zScore}} · {{percentile}} percentile",
+      "zScore": "Z-score",
+      "zScoreLabel": "{{value}}σ",
+      "percentile": "Percentile",
+      "baseline": "Seasonal baseline",
+      "deviation": "Deviation vs seasonal",
+      "history": "Recent seasonal context",
+      "contextUnavailable": "Seasonal context unavailable. Awaiting baseline calibration.",
+      "staleSubtitle": "Stale snapshot · last fix {{datetime}}",
+      "tiles": {
+        "spvxToday": "SPVX (today)",
+        "percentile70d": "Percentile (70d)",
+        "percentileWindow": "Last 70 days",
+        "deltaDay": "Δ vs prior day",
+        "points": "pts",
+        "noDelta": "Awaiting change window"
+      }
+    },
+    "gauge": {
+      "seasonalRatio": "Seasonal ratio",
+      "baselineHint": "Baseline: {{value}} → 100%",
+      "baselineUnavailable": "Baseline unavailable",
+      "degraded": "Degraded",
+      "degradedTooltip": "Recent ingest metrics flagged (gap >10% or lag >15m).",
+      "levelLabel": "Index {{value}}",
+      "zScoreLabel": "Z-score",
+      "zone": {
+        "quiet": "Below seasonal",
+        "normal": "Seasonal range",
+        "elevated": "Elevated pressure",
+        "hot": "Critical congestion",
+        "na": "Baseline unavailable"
+      }
+    },
+    "marketContext": {
+      "title": "Market Context",
+      "subtitle": "Brent & WTI oil prices (daily, EIA/FRED)",
+      "disclaimer": "Context only"
     },
     "indexPerformance": {
       "title": "Index Performance",
@@ -44,12 +96,16 @@
       "errorTitle": "Unable to load current signals.",
       "errorBody": "Unable to fetch signals. Please try again.",
       "degraded": "Degraded mode active. Signals flagged for review.",
+      "reasons": "Degradation notes",
+      "fallback": "Fallback inputs",
+      "qualityChecks": "Quality checks",
       "spvxLite": "SPVX-Lite",
       "change": "Daily change",
       "spread": {
         "label": "Spread direction",
         "topDecile": "Top-decile signal",
         "outside": "Outside decile",
+        "model": "Model signal",
         "fallback": "Fallback ({{strategy}})",
         "notAvailable": "Not available"
       },
@@ -64,6 +120,31 @@
         "date": "Date",
         "value": "Predicted throughput"
       }
+    },
+    "openSeaSummary": {
+      "title": "Chokepoints (24h)",
+      "asOf": "As of {{datetime}}",
+      "filterAll": "All chokepoints",
+      "filters": {
+        "westAfricaBonny": "West Africa · Bonny",
+        "westAfricaEscravos": "West Africa · Escravos",
+        "westAfricaGulf": "West Africa · Gulf Corridor"
+      },
+      "error": "Unable to load chokepoint summary.",
+      "empty": "No crossings in this window. Try a longer range.",
+      "headers": {
+        "corridor": "Corridor",
+        "throughput": "Flux 24h",
+        "fluxZ": "Flux z",
+        "delay": "Delay ratio",
+        "sis": "SIS p90"
+      },
+      "stale": "Stale snapshot · last update {{datetime}}"
+    },
+    "openSea": {
+      "staleGate": "Flux data stale since {{datetime}}",
+      "staleSis": "SIS data stale since {{datetime}}",
+      "gateFluxPending": "Flux tracking for this West Africa corridor will appear after the next overnight aggregation."
     },
     "meta": {
       "title": "SPVX-Lite",
@@ -108,6 +189,24 @@
           "description": "Tanker departures as EU outflow proxy.",
           "cadence": "Daily",
           "note": "Departure tallies for EU throughput."
+        },
+        "CQ_SUEZ": {
+          "label": "Suez Canal",
+          "description": "AIS-based tanker dwell time at Suez chokepoint.",
+          "cadence": "10-minute rollup",
+          "note": "Slow-moving tankers versus seasonal baseline."
+        },
+        "CQ_GIBRALTAR": {
+          "label": "Strait of Gibraltar",
+          "description": "AIS-based tanker dwell time at Gibraltar chokepoint.",
+          "cadence": "10-minute rollup",
+          "note": "Slow-moving tankers versus seasonal baseline."
+        },
+        "PORT_MED": {
+          "label": "Mediterranean Ports",
+          "description": "Tanker departures from major Mediterranean ports.",
+          "cadence": "Daily",
+          "note": "Departure tallies for Mediterranean throughput."
         }
       },
       "drivers": {
@@ -125,6 +224,21 @@
           "label": "PORT_EU",
           "title": "Rotterdam",
           "tooltip": "Tanker departures as EU outflow proxy (grey = stale)."
+        },
+        "CQ_SUEZ": {
+          "label": "CQ_SUEZ",
+          "title": "Suez Canal",
+          "tooltip": "Tanker congestion at Suez Canal chokepoint."
+        },
+        "CQ_GIBRALTAR": {
+          "label": "CQ_GIBRALTAR",
+          "title": "Strait of Gibraltar",
+          "tooltip": "Tanker congestion at Gibraltar chokepoint."
+        },
+        "PORT_MED": {
+          "label": "PORT_MED",
+          "title": "Mediterranean Ports",
+          "tooltip": "Tanker departures from key Mediterranean ports (Augusta, Gioia Tauro, Lavera, Piraeus)."
         }
       },
       "freshness": {
@@ -157,6 +271,24 @@
             "geofence": "Rotterdam",
             "cadence": "Daily",
             "note": "Tanker departures as EU outflow proxy"
+          },
+          "CQ_SUEZ": {
+            "component": "CQ_SUEZ",
+            "geofence": "Suez Canal",
+            "cadence": "10-minute rollup",
+            "note": "Tanker dwell time vs seasonal baseline"
+          },
+          "CQ_GIBRALTAR": {
+            "component": "CQ_GIBRALTAR",
+            "geofence": "Strait of Gibraltar",
+            "cadence": "10-minute rollup",
+            "note": "Tanker dwell time vs seasonal baseline"
+          },
+          "PORT_MED": {
+            "component": "PORT_MED",
+            "geofence": "Mediterranean Ports",
+            "cadence": "Daily",
+            "note": "Tanker departures from Augusta, Gioia Tauro, Lavera, Piraeus"
           }
         },
         "quality": "Stale detection per component; stale contributions are down-weighted automatically (0–100%).",

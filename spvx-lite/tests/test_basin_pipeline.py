@@ -1,36 +1,8 @@
-import os
-
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
 from spvx.api_app import app
-from spvx.db import ensure_core_tables
-from spvx.etl import build_components_daily, compute_basin_indices
-from spvx.sources import mock
-
-
-@pytest.fixture(scope="module")
-def prepared_db(tmp_path_factory):
-    temp_dir = tmp_path_factory.mktemp("spvx_basin")
-    db_path = temp_dir / "spvx.duckdb"
-    previous = os.environ.get("DUCKDB_PATH")
-    os.environ["DUCKDB_PATH"] = str(db_path)
-    try:
-        mock.run(days=220)
-        con = duckdb.connect(str(db_path))
-        try:
-            ensure_core_tables(con)
-            build_components_daily(con)
-            compute_basin_indices(con)
-        finally:
-            con.close()
-        yield str(db_path)
-    finally:
-        if previous is None:
-            os.environ.pop("DUCKDB_PATH", None)
-        else:
-            os.environ["DUCKDB_PATH"] = previous
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +23,7 @@ def test_components_daily_contains_new_basins(prepared_db):
                 """
             ).fetchall()
         }
-        assert {"APAC", "NAM", "SAM"}.issubset(basins)
+        assert {"APAC", "NAM", "SAM", "MED"}.issubset(basins)
 
         comps = con.execute(
             """
@@ -65,6 +37,9 @@ def test_components_daily_contains_new_basins(prepared_db):
         assert ("NAM", "PORT_US") in combo
         assert ("SAM", "CQ_PAN_S") in combo
         assert ("SAM", "PORT_BR") in combo
+        assert ("MED", "CQ_SUEZ") in combo
+        assert ("MED", "CQ_GIBRALTAR") in combo
+        assert ("MED", "PORT_MED") in combo
 
         sample_flag = con.execute(
             "SELECT weather_flag FROM components_daily WHERE weather_flag IS NOT NULL LIMIT 1"
@@ -112,6 +87,28 @@ def test_api_components(api_client):
     assert any(item["comp"] == "PORT_US" for item in payload["series"])
     if payload["series"]:
         assert all("weather_flag" in item for item in payload["series"])  # weather flag propagated
+
+
+def test_api_mediterranean_basin(api_client):
+    """Test Mediterranean basin index and components."""
+    response = api_client.get("/api/index/MED", params={"range": "30d"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["basin"] == "MED"
+    assert len(payload["series"]) > 0
+    if payload["series"]:
+        assert "weather_flag" in payload["series"][0]
+        assert "spvx_basin" in payload["series"][0]
+
+    # Test MED components
+    comp_response = api_client.get("/api/components/MED", params={"range": "14d"})
+    assert comp_response.status_code == 200
+    comp_payload = comp_response.json()
+    assert comp_payload["basin"] == "MED"
+    components_present = {item["comp"] for item in comp_payload["series"]}
+    assert "CQ_SUEZ" in components_present
+    assert "CQ_GIBRALTAR" in components_present
+    assert "PORT_MED" in components_present
 
 
 def test_ops_health_endpoint(api_client):

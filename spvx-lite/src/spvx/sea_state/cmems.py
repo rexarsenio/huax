@@ -10,6 +10,7 @@ import logging
 import math
 import os
 from collections.abc import Iterable
+from typing import Dict
 from pathlib import Path
 
 import numpy as np
@@ -101,15 +102,36 @@ def _normalise_coords(ds: xr.Dataset) -> xr.Dataset:
     return ds
 
 
+def _sort_dataset(ds: xr.Dataset) -> xr.Dataset:
+    if "longitude" in ds.coords:
+        ds = ds.sortby("longitude")
+    if "latitude" in ds.coords:
+        ds = ds.sortby("latitude")
+    return ds
+
+
 def _open_dataset(nc_files: list[str]) -> xr.Dataset | None:
     if not nc_files:
         return None
     try:
-        ds = xr.open_mfdataset(nc_files, combine="by_coords", engine="netcdf4")
+        ds = xr.open_mfdataset(
+            nc_files,
+            combine="by_coords",
+            engine="netcdf4",
+            join="override",
+            preprocess=_sort_dataset,
+            chunks={},
+        )
         return _normalise_coords(ds)
     except Exception as exc:  # pragma: no cover - network/io errors
         LOG.warning("[CMEMS] Failed to open dataset: %s", exc)
-        return None
+        try:
+            ds = xr.open_dataset(nc_files[-1], engine="netcdf4", chunks={})
+            ds = _sort_dataset(ds)
+            return _normalise_coords(ds)
+        except Exception as inner_exc:  # pragma: no cover - fallback errors
+            LOG.warning("[CMEMS] Fallback open_dataset failed: %s", inner_exc)
+            return None
 
 
 def _clip_dataset(ds: xr.Dataset, bbox: dict[str, float]) -> xr.Dataset | None:
@@ -133,26 +155,24 @@ def _select_first_variable(ds: xr.Dataset, candidates: Iterable[str]) -> str | N
     return None
 
 
-def _spatial_statistic(data: xr.DataArray, stat: str) -> xr.DataArray:
-    dims = [dim for dim in ("latitude", "longitude") if dim in data.dims]
-    if not dims:
-        return data
+def _compute_stat_array(array: np.ndarray, stat: str) -> np.ndarray:
+    if array.ndim == 0:
+        array = np.asarray([array])
+    if array.ndim == 1:
+        if stat == "mean":
+            return array.astype(float)
+        if stat == "p90":
+            return array.astype(float)
+        if stat == "p95":
+            return array.astype(float)
+    axes = tuple(range(1, array.ndim))
     if stat == "mean":
-        return data.mean(dim=dims, skipna=True)
-    if stat.startswith("p"):
-        quantile = float(stat[1:]) / 100.0
-        q = data.quantile(quantile, dim=dims, skipna=True)
-        if "quantile" in q.dims:
-            q = q.sel(quantile=quantile, drop=True)
-        return q
+        return np.nanmean(array, axis=axes)
+    if stat == "p90":
+        return np.nanpercentile(array, 90, axis=axes)
+    if stat == "p95":
+        return np.nanpercentile(array, 95, axis=axes)
     raise ValueError(f"Unsupported stat '{stat}'")
-
-
-def _dataarray_to_frame(data: xr.DataArray, column: str) -> pd.DataFrame:
-    frame = data.to_dataframe(name=column).reset_index()
-    if "time" in frame.columns:
-        frame["time"] = pd.to_datetime(frame["time"], utc=True)
-    return frame[["time", column]].dropna()
 
 
 def _vector_magnitude(u: xr.DataArray, v: xr.DataArray) -> xr.DataArray:
@@ -198,6 +218,11 @@ def extract_region_features(
             clipped = _clip_dataset(ds, expanded_bbox)
             if clipped is None:
                 continue
+            try:
+                clipped = clipped.load()
+            except Exception as exc:  # pragma: no cover - dask load guard
+                LOG.warning("[CMEMS] Failed to load dataset into memory: %s", exc)
+                continue
 
             variables = feature.get("variables", [])
             stats = feature.get("stats", ["mean"])
@@ -208,15 +233,26 @@ def extract_region_features(
                 LOG.debug("[CMEMS] Feature '%s' has no supported stats (%s)", feature_id, stats)
                 continue
 
+            time_values = clipped.coords.get("time")
+            if time_values is None:
+                LOG.debug("[CMEMS] Dataset for '%s' lacks time coordinate", feature_id)
+                continue
+            time_index = pd.to_datetime(time_values.values, utc=True)
+
+            def _frame_from_stats(data_map: Dict[str, np.ndarray]) -> pd.DataFrame:
+                frame = pd.DataFrame({"time": time_index})
+                for stat_name, values in data_map.items():
+                    frame[f"{feature_id}_{stat_name}"] = values
+                return frame
+
             if ftype == "scalar":
                 var_name = _select_first_variable(clipped, variables)
                 if var_name is None:
                     LOG.debug("[CMEMS] Feature '%s' variables %s not found", feature_id, variables)
                     continue
-                data_var = clipped[var_name]
-                for stat in valid_stats:
-                    stat_da = _spatial_statistic(data_var, stat)
-                    outputs.append(_dataarray_to_frame(stat_da, f"{feature_id}_{stat}"))
+                array = clipped[var_name].values
+                stats_payload = {stat: _compute_stat_array(array, stat) for stat in valid_stats}
+                outputs.append(_frame_from_stats(stats_payload))
 
             elif ftype == "vector_magnitude":
                 if len(variables) < 2:
@@ -227,10 +263,9 @@ def extract_region_features(
                 if u_name is None or v_name is None:
                     LOG.debug("[CMEMS] Vector variables %s missing for '%s'", variables, feature_id)
                     continue
-                speed = _vector_magnitude(clipped[u_name], clipped[v_name])
-                for stat in valid_stats:
-                    stat_da = _spatial_statistic(speed, stat)
-                    outputs.append(_dataarray_to_frame(stat_da, f"{feature_id}_{stat}"))
+                speed = _vector_magnitude(clipped[u_name], clipped[v_name]).values
+                stats_payload = {stat: _compute_stat_array(speed, stat) for stat in valid_stats}
+                outputs.append(_frame_from_stats(stats_payload))
 
             elif ftype == "opposing":
                 if len(variables) < 2:
@@ -239,9 +274,9 @@ def extract_region_features(
                 v_name = _select_first_variable(clipped, [variables[1]])
                 if u_name is None or v_name is None:
                     continue
-                opp = _opposing_component(clipped[u_name], clipped[v_name], bearing_deg)
-                opp_mean = _spatial_statistic(opp, "mean")
-                outputs.append(_dataarray_to_frame(opp_mean, f"{feature_id}_mean"))
+                opp = _opposing_component(clipped[u_name], clipped[v_name], bearing_deg).values
+                stats_payload = {stat: _compute_stat_array(opp, stat) for stat in valid_stats}
+                outputs.append(_frame_from_stats(stats_payload))
 
             else:  # pragma: no cover - guard for future extensions
                 LOG.warning("[CMEMS] Unknown feature type '%s' for feature '%s'", ftype, feature_id)
@@ -289,10 +324,22 @@ def download_waves(
         LOG.info("[CMEMS WAVES] No files matched date filters")
         return []
 
+    # Check which files already exist locally
+    local_files = [os.path.join(out_dir, os.path.basename(fp)) for fp in wanted]
+    missing_remote = [fp for fp, local in zip(wanted, local_files) if not os.path.exists(local)]
+    existing_count = len(wanted) - len(missing_remote)
+
+    if existing_count > 0:
+        LOG.info("[CMEMS WAVES] Found %d existing files, downloading %d missing", existing_count, len(missing_remote))
+
+    if not missing_remote:
+        LOG.info("[CMEMS WAVES] All files already cached")
+        return [f for f in local_files if os.path.exists(f)]
+
     import tempfile
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
-        for fp in wanted:
+        for fp in missing_remote:
             tmp.write(str(fp) + "\n")
         file_list_path = tmp.name
 
@@ -312,7 +359,6 @@ def download_waves(
         with contextlib.suppress(Exception):
             os.unlink(file_list_path)
 
-    local_files = [os.path.join(out_dir, os.path.basename(fp)) for fp in wanted]
     return [f for f in local_files if os.path.exists(f)]
 
 
@@ -344,10 +390,22 @@ def download_currents(
         LOG.info("[CMEMS CURRENTS] No files matched date filters")
         return []
 
+    # Check which files already exist locally
+    local_files = [os.path.join(out_dir, os.path.basename(fp)) for fp in wanted]
+    missing_remote = [fp for fp, local in zip(wanted, local_files) if not os.path.exists(local)]
+    existing_count = len(wanted) - len(missing_remote)
+
+    if existing_count > 0:
+        LOG.info("[CMEMS CURRENTS] Found %d existing files, downloading %d missing", existing_count, len(missing_remote))
+
+    if not missing_remote:
+        LOG.info("[CMEMS CURRENTS] All files already cached")
+        return [f for f in local_files if os.path.exists(f)]
+
     import tempfile
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
-        for fp in wanted:
+        for fp in missing_remote:
             tmp.write(str(fp) + "\n")
         file_list_path = tmp.name
 
@@ -367,7 +425,6 @@ def download_currents(
         with contextlib.suppress(Exception):
             os.unlink(file_list_path)
 
-    local_files = [os.path.join(out_dir, os.path.basename(fp)) for fp in wanted]
     return [f for f in local_files if os.path.exists(f)]
 
 

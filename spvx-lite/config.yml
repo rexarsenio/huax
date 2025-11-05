@@ -9,8 +9,8 @@ ingest:
 sea_state:
   provider: "cmems"
   waves_dataset_id: "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i"
-  currents_dataset_id: "cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m"
-  lookback_days: 3
+  currents_dataset_id: "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i"  # CORRECT: Physics currents (uo, vo)
+  lookback_days: 2
   out_dir: "data/sea_state"
   buffer_km: 50
   features:
@@ -24,11 +24,6 @@ sea_state:
       type: "scalar"
       variables: ["sst_anom", "thetao_anomaly"]
       stats: ["mean", "p90"]
-    - id: "wind_speed"
-      dataset: "waves"
-      type: "vector_magnitude"
-      variables: ["u10", "v10"]
-      stats: ["p90"]
     - id: "current_speed"
       dataset: "currents"
       type: "vector_magnitude"
@@ -39,7 +34,65 @@ sea_state:
       type: "opposing"
       variables: ["uo", "vo"]
       stats: ["mean"]
+open_sea:
+  enabled: true
+  downsample_secs: 60            # max 1 fix / 60s / MMSI for geofence tests
+  hysteresis_hits: 2             # consecutive hits required for enter/exit
+  ttl_min:
+    moving: 30                   # TTL when vessel is moving
+    anchorage: 90                # TTL in anchorages (longer radio silence)
+  sog_thresholds:
+    dwell_max_kn: 1.0            # SOG threshold for dwell accumulation
+  gates:
+    width_nm_default: 0.8        # default crossing band width
+  cmems:
+    enabled: true
+    features: [hs, uo, vo, sst_anom]  # hs=waves, uo/vo=currents (no wind yet)
+  sis:
+    weights: { wave: 0.33, head_current: 0.33, head_wind: 0.33 }
+    high_impact_p: 0.70
+  flux:
+    count_modes: ["gate_hits", "paired_transits"]
+    tanker_only: true
+    sog_min_kn: 2.0
+    rehit_hours: 6
+    rehit_hours_by_group:
+      GATE_SUEZ_N: 3
+      GATE_SUEZ_S: 3
+      GATE_BOSPORUS_N: 2
+      GATE_BOSPORUS_S: 2
+  geo:
+    polygons_path: data/geo/polygons.geojson
+    gates_path: data/geo/gates.geojson
+  polygons:
+    terminals: data/geo/oil_terminals.geojson
+    sts_zones: data/geo/sts_zones.geojson
+    hysteresis_nm: 0.5
+    ttl_out_min: 15
+    min_dwell:
+      terminal_min: 120
+      sts_min: 360
+weather:
+  provider: openweather
+  regions:
+    MALACCA:
+      lat: 2.5
+      lon: 102.0
+    SINGAPORE:
+      lat: 1.3
+      lon: 103.8
+    GIBRALTAR:
+      lat: 36.0
+      lon: -5.5
+    SUEZ:
+      lat: 30.8
+      lon: 32.3
+    BOSPORUS:
+      lat: 41.0
+      lon: 29.0
+  radius_km: 50
 chokepoints:
+  # --- Original Chokepoints ---
   CQ_SG:
     bbox:
       lat_min: 0.5
@@ -61,6 +114,102 @@ chokepoints:
       lon_min: 3.9
       lon_max: 4.2
     bearing_deg: 270
+  CQ_SUEZ:
+    bbox:
+      lat_min: 29.8
+      lat_max: 31.3
+      lon_min: 32.2
+      lon_max: 32.6
+    bearing_deg: 180
+  CQ_GIBRALTAR:
+    bbox:
+      lat_min: 35.8
+      lat_max: 36.2
+      lon_min: -5.5
+      lon_max: -5.2
+    bearing_deg: 90
+  PORT_MED:
+    bbox:
+      lat_min: 36.0
+      lat_max: 43.0
+      lon_min: -1.0
+      lon_max: 18.0
+    bearing_deg: 90
+
+  # --- New Corridors: Americas & Atlantic ---
+
+  # Venezuela (Maracaibo/Jose Terminal)
+  VENEZUELA_N:
+    bbox:
+      lat_min: 11.50
+      lat_max: 12.00
+      lon_min: -70.80
+      lon_max: -70.40
+    bearing_deg: 180
+  VENEZUELA_W:
+    bbox:
+      lat_min: 10.60
+      lat_max: 11.00
+      lon_min: -71.80
+      lon_max: -71.40
+    bearing_deg: 90
+
+  # Gulf of Mexico (Yucatan Channel)
+  YUCATAN_N:
+    bbox:
+      lat_min: 21.70
+      lat_max: 22.30
+      lon_min: -86.30
+      lon_max: -85.70
+    bearing_deg: 0
+  YUCATAN_S:
+    bbox:
+      lat_min: 20.70
+      lat_max: 21.30
+      lon_min: -87.00
+      lon_max: -86.30
+    bearing_deg: 0
+
+  # Houston/Texas Ports
+  HOUSTON_SE:
+    bbox:
+      lat_min: 28.00
+      lat_max: 29.00
+      lon_min: -95.00
+      lon_max: -94.50
+    bearing_deg: 0
+  PORT_GALVESTON:
+    bbox:
+      lat_min: 29.10
+      lat_max: 29.50
+      lon_min: -95.00
+      lon_max: -94.60
+    bearing_deg: 270
+
+  # Brazil Ports (Santos/Rio de Janeiro)
+  PORT_SANTOS:
+    bbox:
+      lat_min: -24.20
+      lat_max: -23.80
+      lon_min: -46.50
+      lon_max: -46.10
+    bearing_deg: 90
+  PORT_RIO:
+    bbox:
+      lat_min: -23.20
+      lat_max: -22.80
+      lon_min: -43.40
+      lon_max: -43.00
+    bearing_deg: 90
+
+  # Las Palmas (Gran Canaria - Bunkering Hub)
+  PORT_LAS_PALMAS:
+    bbox:
+      lat_min: 28.00
+      lat_max: 28.20
+      lon_min: -15.50
+      lon_max: -15.35
+    bearing_deg: 45
 index:
   weights:
     CQ_TR: 1.0

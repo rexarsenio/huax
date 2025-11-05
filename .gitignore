@@ -1,28 +1,47 @@
-# Environment & secrets
-.env
-*.env.local
+# macOS / IDE
+.DS_Store
+*.log
+*.sqlite
+.vscode/
+.idea/
 
 # Python
 __pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-coverage.xml
+*.py[cod]
+*.pyo
+*.pyd
 
-# Node/Vite
-node_modules/
-dashboard/node_modules/
-dashboard/dist/
-*.tsbuildinfo
-
-# Virtual environments
+# Virtuelle Umgebungen / Env-Dateien
 .venv/
 */.venv/
-.venv312/
-*/.venv312/
+.env
+.env.*
+*.env
 
-# Data & Database artifacts
+# Lokale Daten & Logs
 data/
-db/
+logs/
+db/*.duckdb
+db/*.duckdb.*
+spvx-lite/data/
+spvx-lite/logs/
+spvx-lite/exports/
+spvx-lite/db/*.duckdb
+spvx-lite/db/*.duckdb.*
+spvx-lite/.env
+spvx-lite/.env.*
+spvx-lite/.venv312/
+coverage.xml
+*.coverage
+.claude/
+
+# Node / Vite Artefakte
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+dashboard/ngrok.zip
+dashboard/ngrok-v3.tgz
+dashboard/tsconfig.tsbuildinfo
+
+# Build/Temp/Backups
+Homepageforoiltankerapp-main/

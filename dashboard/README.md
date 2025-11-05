@@ -24,6 +24,7 @@ Production-ready single page application that consumes the FastAPI endpoints exp
 1. **Index Overview**
    - Area/line chart of SPVX-Lite (last 90 vs 365 days toggle).
    - Daily change sparkline, latest value card with delta vs prior day.
+   - Seasonal gauge: current vs seasonal baseline (0–200% ratio, quiet/normal/elevated/hot zones).
    - Heatmap of component z-scores (CQ_TR / CQ_SG / PORT_EU).
 2. **Signals Panel**
    - Spread-direction card: probability, top-decile tag, optional scenario text.

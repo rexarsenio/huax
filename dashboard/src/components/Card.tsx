@@ -20,30 +20,30 @@ export const Card = ({
 }: CardProps) => {
   const variantStyles = {
     default:
-      "bg-background-elevated border-border shadow-card hover:shadow-card-hover",
+      "bg-background-elevated border-border/60 shadow-md hover:shadow-lg hover:border-border",
     elevated:
-      "bg-background-elevated border-border shadow-card-hover",
-    glass: "glass-effect shadow-glow",
+      "bg-background-elevated border-border shadow-lg hover:shadow-xl",
+    glass: "glass-effect shadow-xl border-white/10",
   };
 
   return (
     <section
       className={clsx(
-        "rounded-2xl border p-6 transition-smooth animate-fade-in",
+        "rounded-xl border p-7 transition-all duration-300 animate-fade-in",
         variantStyles[variant],
         className
       )}
     >
       {(title || subtitle || action) && (
-        <header className="mb-5 flex items-start justify-between gap-4">
+        <header className="mb-6 flex items-start justify-between gap-4 pb-5 border-b border-border/30">
           <div className="flex-1">
             {title && (
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground mb-1">
                 {title}
               </h2>
             )}
             {subtitle && (
-              <p className="mt-1 text-sm text-foreground-muted">
+              <p className="text-sm text-foreground-muted font-medium">
                 {subtitle}
               </p>
             )}
@@ -51,7 +51,7 @@ export const Card = ({
           {action && <div className="flex-shrink-0">{action}</div>}
         </header>
       )}
-      <div>{children}</div>
+      <div className="space-y-4">{children}</div>
     </section>
   );
 };

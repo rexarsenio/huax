@@ -8,12 +8,15 @@ fallback heuristics when model quality degrades.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import math
-from collections.abc import Iterable, Sequence
+import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import duckdb
 import joblib
 import numpy as np
 import pandas as pd
@@ -25,7 +28,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from spvx.config import load_config
+from spvx.config import AppSettings, load_config
 from spvx.features.baselines import winsorize
 from spvx.metrics import spvx_model_drift, spvx_model_score
 from spvx.utils.publish import atomic_write_json
@@ -37,6 +40,8 @@ ROLLING_STD_WINDOW = 21
 VOL_LOOKBACK_DAYS = 730  # two years ~ 365*2
 CALIBRATION_BINS = 10
 DEGRADE_AUC_THRESHOLD = 0.60
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -103,7 +108,17 @@ def _prepare_dataset() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame
 
     # Build features using only information available at time t.
     feature_cols: dict[str, pd.Series] = {}
-    component_cols: Iterable[str] = [col for col in df.columns if col.startswith("CQ_") or col == "PORT_EU"]
+    component_cols: list[str] = [col for col in df.columns if col.startswith("CQ_") or col == "PORT_EU"]
+    min_history = 30
+    filtered_cols: list[str] = []
+    for col in component_cols:
+        if df[col].notna().sum() < min_history:
+            continue
+        std_val = df[col].std(skipna=True)
+        if pd.isna(std_val) or std_val == 0:
+            continue
+        filtered_cols.append(col)
+    component_cols = filtered_cols
     for col in component_cols:
         feature_cols[col] = df[col]
         for lag in (1, 3, 5):
@@ -117,6 +132,7 @@ def _prepare_dataset() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame
     calendar_df = _calendar_features(df.index)
     macro_df = _macro_controls(df)
     features = pd.concat([features, calendar_df, macro_df], axis=1).replace([np.inf, -np.inf], np.nan)
+    features = features.fillna(0.0)
 
     df["spread_fwd"] = df["spread"].shift(-1) - df["spread"]
     cfg = load_config()
@@ -124,7 +140,7 @@ def _prepare_dataset() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame
     df["target"] = (df["spread_fwd"] > target_threshold).astype(int)
 
     valid_mask = df["target"].notna()
-    features = features[valid_mask].dropna()
+    features = features[valid_mask]
     aligned = df.loc[features.index]
     y = aligned["target"].astype(int)
     spread_fwd = aligned["spread_fwd"]
@@ -142,9 +158,32 @@ def _prepare_dataset() -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame
 
 
 def _time_series_split(n_samples: int, n_splits: int = 5, gap: int = 7, test_size: int = 30) -> TimeSeriesSplit:
-    if n_samples < (n_splits + 1) * test_size:
-        n_splits = max(2, n_samples // test_size - 1)
-    return TimeSeriesSplit(n_splits=n_splits, gap=gap, test_size=test_size)
+    """
+    Construct a TimeSeriesSplit that gracefully degrades when the sample set is small.
+    Ensures sklearn does not raise due to insufficient history by reducing split count
+    and test window length when needed.
+    """
+    if n_samples <= gap + 5:
+        # Trivial fallback: not enough observations even for a single test window.
+        return TimeSeriesSplit(n_splits=2, gap=min(gap, max(n_samples // 4, 1)), test_size=max(1, n_samples // 3))
+
+    # Ensure the number of splits is feasible for the dataset size.
+    max_feasible_splits = (n_samples - gap) // max(test_size, 1) - 1
+    if max_feasible_splits < 2:
+        max_feasible_splits = 2
+    n_splits = min(n_splits, max_feasible_splits)
+
+    # Adjust test window so that total history covers all splits plus the terminal gap.
+    max_test_size = max(1, (n_samples - gap) // (n_splits + 1))
+    adjusted_test_size = min(test_size, max_test_size)
+
+    # Final safeguard: ensure sklearn's internal check passes.
+    while n_splits > 1 and (n_samples - gap - adjusted_test_size * n_splits) <= 0:
+        n_splits -= 1
+    if n_samples - gap - adjusted_test_size * n_splits <= 0:
+        adjusted_test_size = max(1, (n_samples - gap) // (n_splits + 1))
+
+    return TimeSeriesSplit(n_splits=n_splits, gap=gap, test_size=adjusted_test_size)
 
 
 def _fold_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
@@ -234,6 +273,74 @@ def _fallback_signal(series: pd.Series, vol_threshold: float) -> tuple[float, di
         p_up = float(np.clip(raw, 0.35, 0.65))
 
     return p_up, drivers, reasons
+
+
+def _to_utc_iso(ts: object | None) -> str | None:
+    if ts is None:
+        return None
+    try:
+        stamp = pd.Timestamp(ts)
+    except Exception:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+    else:
+        stamp = stamp.tz_convert("UTC")
+    return stamp.isoformat().replace("+00:00", "Z")
+
+
+def _latest_sea_state() -> dict[str, object] | None:
+    settings = AppSettings()
+    db_path = Path(settings.duckdb_path)
+    if not db_path.exists():
+        return None
+    try:
+        con = duckdb.connect(str(db_path))
+    except Exception as exc:  # pragma: no cover - DuckDB unavailable
+        LOG.debug("Unable to connect to DuckDB for sea-state lookup: %s", exc)
+        return None
+    try:
+        global_row = con.execute(
+            """
+            SELECT d, sea_hs_z_avg, sea_data_timestamp
+            FROM spvx_global_daily
+            ORDER BY d DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if not global_row:
+            return None
+        day_value, hs_z_avg, data_ts = global_row
+        opp_row = con.execute(
+            """
+            SELECT AVG(sea_opp_current) AS opp_current
+            FROM components_daily
+            WHERE d = ? AND sea_opp_current IS NOT NULL
+            """,
+            [day_value],
+        ).fetchone()
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        LOG.debug("Sea-state aggregation lookup failed: %s", exc)
+        return None
+    finally:
+        con.close()
+
+    payload: dict[str, object] = {}
+    if hs_z_avg is not None:
+        payload["hs_z"] = float(hs_z_avg)
+    if opp_row and opp_row[0] is not None:
+        payload["opp_current"] = float(opp_row[0])
+
+    iso_ts = _to_utc_iso(data_ts)
+    if not iso_ts and isinstance(day_value, dt.date):
+        iso_ts = _to_utc_iso(dt.datetime.combine(day_value, dt.time.min))
+    if iso_ts:
+        payload["as_of"] = iso_ts
+
+    if "hs_z" not in payload or "as_of" not in payload:
+        return None
+
+    return payload
 
 
 def train_spread(model_path: str | Path = "data/outputs/model_spread.pkl") -> TrainResult:
@@ -452,14 +559,19 @@ def score_spread(model_path: str | Path = "data/outputs/model_spread.pkl") -> Sc
 
     mode = "model"
     final_prob = float(latest_row["prob_up"])
-    drivers: dict[str, float] = {}
+    drivers: dict[str, object] = {}
     reasons: list[str] = []
     if degraded:
         mode = "fallback"
         reasons = sorted(set(degrade_reasons + fallback_reasons))
         final_prob = fallback_p
-        drivers = fallback_drivers
+        drivers = dict(fallback_drivers)
     final_prob = _maybe_damp(prev_prob if isinstance(prev_prob, (float, int)) else None, final_prob)
+
+    sea_state_info = _latest_sea_state()
+    if sea_state_info:
+        drivers = dict(drivers)
+        drivers["sea_state"] = sea_state_info
 
     if not scores_indexed.empty:
         prob_series = scores_indexed["prob_up"].dropna()

@@ -13,7 +13,10 @@ import duckdb
 import requests
 
 from spvx.db import ensure_core_tables
-from chokepoints import CHOKEPOINTS
+try:
+    from chokepoints import CHOKEPOINTS
+except ImportError:
+    CHOKEPOINTS = {}
 
 LOG = logging.getLogger("spvx.weather.openweather")
 

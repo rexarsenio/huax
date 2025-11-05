@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Dashboard operativa SPVX-Lite",
+    "title": "Dashboard Operativa",
     "subtitle": "Segnali dei choke point, spread e nowcast di throughput.",
     "footer": "© {{year}} Huax Energy Intelligence. Aggiornamento automatico ogni pochi minuti · Dati dal servizio FastAPI."
   },
@@ -22,10 +22,87 @@
     "not_ready": "Non pronto",
     "missing": "Elementi mancanti"
   },
+  "refresh": {
+    "asOf": "Aggiornato alle {{datetime}}",
+    "auto": "Auto-refresh ✓",
+    "intervalMinutes": "{{minutes}} min",
+    "intervalSeconds": "{{seconds}} s",
+    "stale": "Dati obsoleti dal {{datetime}}"
+  },
   "dashboard": {
     "latestIndex": {
       "title": "Indice più recente",
-      "label": "Livello SPVX-Lite"
+      "label": "Livello SPVX-Lite",
+      "subtitle": "Aggiornato al {{datetime}}",
+      "loading": "Caricamento dell'ultima istantanea…",
+      "unavailable": "Istantanea non disponibile al momento.",
+      "retryHint": "Verifica l'ingest o riprova tra poco.",
+      "statusUnknown": "Stato non disponibile",
+      "seasonalBaseline": "Baseline stagionale {{value}}",
+      "scopeLabel": "Ambito: {{scope}}",
+      "seasonalSummary": "{{zScore}} · {{percentile}} percentile",
+      "zScore": "Z-score",
+      "zScoreLabel": "{{value}}σ",
+      "percentile": "Percentile",
+      "baseline": "Baseline stagionale",
+      "deviation": "Deviazione vs stagionale",
+      "history": "Contesto stagionale recente",
+      "contextUnavailable": "Contesto stagionale non disponibile. In attesa della calibrazione baseline.",
+      "staleSubtitle": "Istantanea obsoleta · ultimo fix {{datetime}}",
+      "tiles": {
+        "spvxToday": "SPVX (oggi)",
+        "percentile70d": "Percentile (70g)",
+        "percentileWindow": "Ultimi 70 giorni",
+        "deltaDay": "Δ vs giorno precedente",
+        "points": "pt",
+        "noDelta": "In attesa della finestra di variazione"
+      }
+    },
+    "openSeaSummary": {
+      "title": "Choke point (24h)",
+      "asOf": "Aggiornato al {{datetime}}",
+      "filterAll": "Tutti i choke point",
+      "filters": {
+        "westAfricaBonny": "Africa Occidentale · Bonny",
+        "westAfricaEscravos": "Africa Occidentale · Escravos",
+        "westAfricaGulf": "Africa Occidentale · Corridoio del Golfo"
+      },
+      "error": "Impossibile caricare il riepilogo dei choke point.",
+      "empty": "Nessun attraversamento in questa finestra. Prova con un intervallo più lungo.",
+      "headers": {
+        "corridor": "Corridoio",
+        "throughput": "Flusso 24h",
+        "fluxZ": "Z del flusso",
+        "delay": "Rapporto ritardi",
+        "sis": "SIS p90"
+      },
+      "stale": "Istantanea obsoleta · ultimo aggiornamento {{datetime}}"
+    },
+    "openSea": {
+      "staleGate": "Dati di flusso obsoleti dal {{datetime}}",
+      "staleSis": "Dati SIS obsoleti dal {{datetime}}",
+      "gateFluxPending": "Il monitoraggio del flusso per questo corridoio dell'Africa Occidentale apparirà dopo la prossima aggregazione notturna."
+    },
+    "gauge": {
+      "seasonalRatio": "Rapporto stagionale",
+      "baselineHint": "Baseline: {{value}} → 100%",
+      "baselineUnavailable": "Baseline non disponibile",
+      "degraded": "Degradato",
+      "degradedTooltip": "Metriche di ingestione in allarme (gap >10% o lag >15 min).",
+      "levelLabel": "Indice {{value}}",
+      "zScoreLabel": "Z-score",
+      "zone": {
+        "quiet": "Sotto stagionale",
+        "normal": "Fascia stagionale",
+        "elevated": "Pressione elevata",
+        "hot": "Congestione critica",
+        "na": "Baseline non disponibile"
+      }
+    },
+    "marketContext": {
+      "title": "Contesto di mercato",
+      "subtitle": "Prezzi Brent & WTI (giornaliero, EIA/FRED)",
+      "disclaimer": "Solo contesto"
     },
     "indexPerformance": {
       "title": "Andamento dell'indice",
@@ -44,15 +121,19 @@
       "errorTitle": "Impossibile caricare i segnali correnti.",
       "errorBody": "Impossibile recuperare i segnali. Riprova.",
       "degraded": "Modalità degradata attiva. Segnali da verificare.",
+      "reasons": "Note di degradazione",
+      "fallback": "Ingressi fallback",
+      "qualityChecks": "Controlli qualità",
       "spvxLite": "SPVX-Lite",
       "change": "Variazione giornaliera",
-  "spread": {
-    "label": "Direzione dello spread",
-    "topDecile": "Segnale nel decile superiore",
-    "outside": "Fuori dal decile",
-    "fallback": "Fallback ({{strategy}})",
-    "notAvailable": "Non disponibile"
-  },
+      "spread": {
+        "label": "Direzione dello spread",
+        "topDecile": "Segnale nel decile superiore",
+        "outside": "Fuori dal decile",
+        "model": "Segnale del modello",
+        "fallback": "Fallback ({{strategy}})",
+        "notAvailable": "Non disponibile"
+      },
       "throughput": {
         "label": "Throughput a 72h",
         "mae": "MAE unità",
@@ -108,6 +189,24 @@
           "description": "Partenze dei tanker come proxy dei flussi UE.",
           "cadence": "Giornaliero",
           "note": "Partenze come proxy del throughput UE"
+        },
+        "CQ_SUEZ": {
+          "label": "Canale di Suez",
+          "description": "Tempo di permanenza dei tanker AIS al choke point di Suez.",
+          "cadence": "Aggregazione ogni 10 minuti",
+          "note": "Tanker a movimento lento vs profilo stagionale"
+        },
+        "CQ_GIBRALTAR": {
+          "label": "Stretto di Gibilterra",
+          "description": "Tempo di permanenza dei tanker AIS allo stretto di Gibilterra.",
+          "cadence": "Aggregazione ogni 10 minuti",
+          "note": "Tanker a movimento lento vs profilo stagionale"
+        },
+        "PORT_MED": {
+          "label": "Porti Mediterranei",
+          "description": "Partenze dei tanker dai principali porti mediterranei.",
+          "cadence": "Giornaliero",
+          "note": "Partenze come proxy del throughput mediterraneo"
         }
       },
       "drivers": {
@@ -125,6 +224,21 @@
           "label": "PORT_EU",
           "title": "Rotterdam",
           "tooltip": "Partenze dei tanker come proxy dei flussi UE (grigio = dato obsoleto)."
+        },
+        "CQ_SUEZ": {
+          "label": "CQ_SUEZ",
+          "title": "Canale di Suez",
+          "tooltip": "Congestione dei tanker al Canale di Suez."
+        },
+        "CQ_GIBRALTAR": {
+          "label": "CQ_GIBRALTAR",
+          "title": "Stretto di Gibilterra",
+          "tooltip": "Congestione dei tanker allo Stretto di Gibilterra."
+        },
+        "PORT_MED": {
+          "label": "PORT_MED",
+          "title": "Porti Mediterranei",
+          "tooltip": "Partenze dei tanker dai porti chiave del Mediterraneo (Augusta, Gioia Tauro, Lavera, Pireo)."
         }
       },
       "freshness": {
@@ -157,6 +271,24 @@
             "geofence": "Rotterdam",
             "cadence": "Giornaliero",
             "note": "Partenze tanker come proxy UE"
+          },
+          "CQ_SUEZ": {
+            "component": "CQ_SUEZ",
+            "geofence": "Canale di Suez",
+            "cadence": "Aggregazione ogni 10 minuti",
+            "note": "Tempo di permanenza tanker vs profilo stagionale"
+          },
+          "CQ_GIBRALTAR": {
+            "component": "CQ_GIBRALTAR",
+            "geofence": "Stretto di Gibilterra",
+            "cadence": "Aggregazione ogni 10 minuti",
+            "note": "Tempo di permanenza tanker vs profilo stagionale"
+          },
+          "PORT_MED": {
+            "component": "PORT_MED",
+            "geofence": "Porti Mediterranei",
+            "cadence": "Giornaliero",
+            "note": "Partenze tanker da Augusta, Gioia Tauro, Lavera, Pireo"
           }
         },
         "quality": "Rilevazione dello stato stale per componente; i contributi obsoleti sono riponderati automaticamente (0–100%).",

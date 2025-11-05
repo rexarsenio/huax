@@ -1,4 +1,60 @@
-export type Basin = "GLOBAL" | "EUR" | "APAC" | "NAM" | "SAM";
+export type Basin = "GLOBAL" | "APAC" | "NAM" | "SAM" | "MED";
+
+export type RelativeStressClassification = {
+  status: string;
+  severity: string;
+  direction?: string | null;
+  color: string;
+  emoji?: string | null;
+  headline?: string | null;
+};
+
+export type RelativeStressResult = {
+  value: number;
+  z_score: number;
+  percentile?: number | null;
+  seasonal_mean?: number | null;
+  seasonal_std?: number | null;
+  deviation_pct?: number | null;
+  doy?: number | null;
+  sample_size: number;
+  lookback_window: number;
+  lookback_samples: number;
+  seasonal_label?: string | null;
+  classification: RelativeStressClassification;
+  data_gap_ratio?: number | null;
+  ingest_lag_seconds?: number | null;
+};
+
+export type RelativeStressNarrativeDetail = {
+  label: string;
+  value: number;
+  context?: string | null;
+};
+
+export type RelativeStressNarrative = {
+  headline: string;
+  summary: string;
+  status: string;
+  color: string;
+  details: RelativeStressNarrativeDetail[];
+};
+
+export type RelativeStressHistoryPoint = {
+  date: string;
+  value: number;
+  z_score?: number | null;
+  percentile?: number | null;
+  seasonal_mean?: number | null;
+  seasonal_std?: number | null;
+  deviation_pct?: number | null;
+};
+
+export type RelativeStressPayload = {
+  latest: RelativeStressResult;
+  history: RelativeStressHistoryPoint[];
+  narrative?: RelativeStressNarrative;
+};
 
 export type GlobalIndexPoint = {
   d: string;
@@ -17,12 +73,14 @@ export type BasinIndexPoint = {
 export type GlobalIndexResponse = {
   series: GlobalIndexPoint[];
   latest?: GlobalIndexPoint;
+  relative_stress?: RelativeStressPayload;
 };
 
 export type BasinIndexResponse = {
   basin: string;
   series: BasinIndexPoint[];
   latest?: BasinIndexPoint;
+  relative_stress?: RelativeStressPayload;
 };
 
 export type ComponentPoint = {
@@ -33,6 +91,14 @@ export type ComponentPoint = {
   n_obs: number | null;
   missing_reason?: string | null;
   weather_flag?: number | null;
+  seasonal_mean?: number | null;
+  seasonal_std?: number | null;
+  seasonal_lower?: number | null;
+  seasonal_upper?: number | null;
+  seasonal_lower_extreme?: number | null;
+  seasonal_upper_extreme?: number | null;
+  deviation_pct?: number | null;
+  classification?: RelativeStressClassification | null;
 };
 
 export type ComponentsResponse = {
@@ -80,6 +146,35 @@ export type SpreadSignalsResponse = {
 export type ThroughputNowcastResponse = {
   latest: Record<string, unknown>;
   series: Record<string, unknown>[];
+};
+
+export type LatestIndexSnapshot = {
+  scope: string;
+  ts: string;
+  spvx: number;
+  seasonal_baseline?: number | null;
+  deviation_pct?: number | null;
+  zscore?: number | null;
+  percentile_70d?: number | null;
+  delta_day_points?: number | null;
+  delta_day_pct?: number | null;
+  classification?: RelativeStressClassification | null;
+};
+
+export type ChokepointSummaryEntry = {
+  gate_id: string;
+  label: string;
+  flux: number;
+  flux_z?: number | null;
+  delay_ratio?: number | null;
+  sis_p90?: number | null;
+  trend?: Array<[string, number]> | null;
+};
+
+export type ChokepointSummaryResponse = {
+  window: string;
+  as_of: string;
+  corridors: ChokepointSummaryEntry[];
 };
 
 export type SignalsSnapshot = {
@@ -145,6 +240,16 @@ export type InterpretationBand = {
   range_default?: string;
 };
 
+export type RelativeStressBand = {
+  status: string;
+  label: string;
+  description?: string;
+  min_z?: number | null;
+  max_z?: number | null;
+  color?: string;
+  emoji?: string;
+};
+
 export type BadgeMeta = {
   state: string;
   text_key?: string;
@@ -187,6 +292,9 @@ export type IndexMeta = {
     rule_of_thumb_default?: string;
     material_move_points: number;
     bands: InterpretationBand[];
+    relative_bands?: RelativeStressBand[];
+    latest_status?: RelativeStressResult;
+    latest_narrative?: RelativeStressNarrative;
   };
   drivers: DriverMeta[];
   coverage: CoverageMeta[];

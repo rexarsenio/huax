@@ -1,14 +1,15 @@
 import { Card } from "./Card";
 import { Skeleton } from "./Skeleton";
-import { useIndexMeta } from "../hooks/useApi";
+import { useIndexMeta, useGlobalIndex } from "../hooks/useApi";
 import { useTranslation } from "react-i18next";
 
 export const MetaHero = () => {
   const { data, isLoading, isError } = useIndexMeta();
+  const globalQuery = useGlobalIndex("7d");
   const { t } = useTranslation();
 
-  if (isLoading) {
-    return <Skeleton className="h-32 w-full" />;
+  if (isLoading || globalQuery.isLoading) {
+    return <Skeleton className="h-96 w-full" />;
   }
 
   if (isError || !data) {
@@ -19,89 +20,117 @@ export const MetaHero = () => {
     );
   }
 
-  const { index, coverage, methodology } = data;
-  const tagline = index.tagline_key
-    ? t(index.tagline_key, { defaultValue: index.tagline_default ?? "" })
-    : index.tagline_default ?? index.name;
+  const { index, methodology } = data;
+
+  // ⚠️ CRITICAL: Use ONLY /api/index/global data - the single source of truth!
+  const relativeStress = globalQuery.data?.relative_stress;
+  const latestPoint = globalQuery.data?.latest;
+  const latestStatus = relativeStress?.latest; // Use live data from /api/index/global, NOT /meta!
+  const latestNarrative = relativeStress?.narrative;
+
+  const currentValue = latestPoint?.spvx_global ?? 100;
+
+  // All metrics MUST come from the live relative_stress data
+  const zScore = latestStatus?.z_score ?? 0;
+  const percentile = latestStatus?.percentile ?? 50;
+  const seasonalMean = latestStatus?.seasonal_mean ?? 100;
+  const deviationPct = latestStatus?.deviation_pct ?? 0;
+  const dataGapRatio =
+    latestStatus?.data_gap_ratio != null
+      ? latestStatus.data_gap_ratio
+      : latestPoint && typeof (latestPoint as { data_gap_ratio?: number | null }).data_gap_ratio === "number"
+      ? ((latestPoint as { data_gap_ratio?: number | null }).data_gap_ratio as number)
+      : undefined;
+  const ingestLagSeconds =
+    latestStatus?.ingest_lag_seconds != null
+      ? latestStatus.ingest_lag_seconds
+      : latestPoint &&
+          typeof (latestPoint as { ingest_lag_seconds?: number | null }).ingest_lag_seconds === "number"
+      ? ((latestPoint as { ingest_lag_seconds?: number | null }).ingest_lag_seconds as number)
+      : undefined;
+
+  // Simple, deterministic status classification based on z-score
+  const getStatus = (z: number) => {
+    if (z <= -0.5) return { label: "QUIET", color: "#6366f1", bg: "#6366f120" };
+    if (z >= 0.5) return { label: "ELEVATED", color: "#f59e0b", bg: "#f59e0b20" };
+    return { label: "NORMAL", color: "#10b981", bg: "#10b98120" };
+  };
+
+  const status = getStatus(zScore);
   const description = index.description_key
     ? t(index.description_key, { defaultValue: index.description_default ?? "" })
     : index.description_default ?? "";
-  const ruleOfThumb = index.rule_of_thumb_key
-    ? t(index.rule_of_thumb_key, { defaultValue: index.rule_of_thumb_default ?? "" })
-    : index.rule_of_thumb_default ?? "";
-  const materialMoveLabel = t("dashboard.meta.materialMoveLabel", {
-    points: index.material_move_points,
-    defaultValue: ruleOfThumb,
-  });
 
   return (
     <Card
       title={`${index.name} · v${index.version}`}
-      subtitle={`${index.fix_time_utc} UTC`}>
-      <div className="space-y-4">
-        <div>
-          <p className="text-lg font-semibold text-foreground">{tagline}</p>
-          <p className="text-sm text-foreground/60 mt-1">{description}</p>
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-foreground/60">{t("dashboard.meta.ruleOfThumb")}</p>
-            <p className="text-sm text-foreground/80">{ruleOfThumb}</p>
-            <ul className="mt-2 space-y-1 text-sm text-foreground/70">
-              {index.bands.map((band, idx) => (
-                <li key={band.label_key ?? String(idx)}>
-                  <span className="font-medium">
-                    {band.label_key ? t(band.label_key, { defaultValue: band.label_default ?? "" }) : band.label_default ?? ""}
-                  </span>
-                  : {band.range_key ? t(band.range_key, { defaultValue: band.range_default ?? "" }) : band.range_default ?? ""}
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-foreground/50 mt-2">{materialMoveLabel}</p>
+      subtitle={`${index.fix_time_utc} UTC`}
+    >
+      <div className="space-y-6">
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span
+              className="rounded-lg px-3 py-1.5 text-sm font-semibold"
+              style={{ backgroundColor: status.bg, color: status.color }}
+            >
+              {status.label}
+            </span>
+            <span className="text-sm text-foreground/60">vs seasonal normal</span>
           </div>
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-foreground/60">{t("dashboard.meta.coverage")}</p>
-            <ul className="space-y-1 text-sm text-foreground/70">
-              {coverage.map((item) => (
-                <li key={item.id}>
-                  <span className="font-medium">
-                    {item.label_key ? t(item.label_key, { defaultValue: item.label_default ?? item.id }) : item.label_default ?? item.id}
-                  </span>
-                  : {item.description_key ? t(item.description_key, { defaultValue: item.description_default ?? "" }) : item.description_default ?? ""}
-                  {item.cadence_key
-                    ? ` (${t(item.cadence_key, { defaultValue: item.cadence_default ?? "" })})`
-                    : item.cadence_default
-                    ? ` (${item.cadence_default})`
-                    : null}
-                </li>
-              ))}
-            </ul>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { k: "SPVX", v: currentValue.toFixed(1) },
+              { k: "Seasonal normal", v: seasonalMean.toFixed(1) },
+              { k: "Deviation", v: `${deviationPct >= 0 ? "+" : ""}${deviationPct.toFixed(0)}%` },
+              { k: "Percentile", v: `${Math.round(percentile)}th` },
+            ].map((x) => (
+              <div
+                key={x.k}
+                className="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3"
+              >
+                <div className="text-[10px] uppercase tracking-wide text-foreground/50">{x.k}</div>
+                <div className="text-2xl font-semibold text-foreground">{x.v}</div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          {latestNarrative && (
+            <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
+              <p className="text-sm text-foreground/80">{latestNarrative.summary}</p>
+            </div>
+          )}
+        </section>
+
+        {/* Methodology (Collapsed by default) */}
         <details className="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/80">
-          <summary className="cursor-pointer text-foreground font-medium">
-            {t("dashboard.meta.methodologyLink")}
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            {t("dashboard.meta.methodologyLink", { defaultValue: "Methodology & Details" })}
           </summary>
           <div className="mt-3 space-y-3">
-            <p>
+            {description && <p className="text-xs text-foreground/70">{description}</p>}
+            <p className="text-xs">
               {methodology.summary_key
                 ? t(methodology.summary_key, { defaultValue: methodology.summary_default ?? "" })
                 : methodology.summary_default ?? ""}
             </p>
-            <p>
-              {methodology.interpretation_key
-                ? t(methodology.interpretation_key, { defaultValue: methodology.interpretation_default ?? "" })
-                : methodology.interpretation_default ?? ""}
-            </p>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/60 mb-2">{t("dashboard.meta.tableTitle")}</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-foreground/60">
+                {t("dashboard.meta.tableTitle")}
+              </p>
               <div className="overflow-x-auto rounded-lg border border-foreground/10">
                 <table className="min-w-full divide-y divide-foreground/10 text-xs">
                   <thead className="bg-foreground/5 text-foreground/60">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">{t("dashboard.meta.component")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("dashboard.meta.geofence")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("dashboard.meta.cadence")}</th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        {t("dashboard.meta.component")}
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        {t("dashboard.meta.geofence")}
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        {t("dashboard.meta.cadence")}
+                      </th>
                       <th className="px-3 py-2 text-left font-medium">{t("dashboard.meta.note")}</th>
                     </tr>
                   </thead>
@@ -140,7 +169,9 @@ export const MetaHero = () => {
                 : methodology.quality_default ?? ""}
             </p>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/60 mb-1">{t("dashboard.meta.transparency")}</p>
+              <p className="mb-1 text-xs uppercase tracking-wide text-foreground/60">
+                {t("dashboard.meta.transparency")}
+              </p>
               <ul className="list-disc space-y-1 pl-5">
                 {(methodology.transparency_keys ?? []).map((key, idx) => (
                   <li key={key}>
@@ -153,6 +184,7 @@ export const MetaHero = () => {
             </div>
           </div>
         </details>
+
         <p className="text-xs text-foreground/50">
           {methodology.disclaimer_key
             ? t(methodology.disclaimer_key, { defaultValue: methodology.disclaimer_default ?? "" })

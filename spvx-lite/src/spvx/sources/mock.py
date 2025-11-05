@@ -89,6 +89,8 @@ def _make_dwell_windows(start: datetime, days: int) -> pd.DataFrame:
         ("hormuz", 14),
         ("panama_n", 12),
         ("panama_s", 10),
+        ("suez", 16),
+        ("gibraltar", 13),
     ]
     windows = pd.date_range(start=start, periods=days * 144, freq="10min")
     rows = []
@@ -114,6 +116,10 @@ def _make_portwatch_daily(start: datetime, days: int) -> pd.DataFrame:
         ("South Louisiana", "south_louisiana", "USA", 55),
         ("Santos", "santos", "BRA", 50),
         ("Rio de Janeiro", "rio_de_janeiro", "BRA", 35),
+        ("Augusta", "augusta", "ITA", 45),
+        ("Gioia Tauro", "gioia_tauro", "ITA", 38),
+        ("Lavera", "lavera", "FRA", 32),
+        ("Piraeus", "piraeus", "GRC", 40),
     ]
     idx = pd.date_range(start=start, periods=days, freq="D")
     rows = []

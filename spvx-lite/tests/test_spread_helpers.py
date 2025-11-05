@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+from pathlib import Path
 
 from spvx.models.spread_direction import (
     _compute_volatility,
@@ -10,8 +12,17 @@ from spvx.models.spread_direction import (
     _time_series_split,
 )
 
+_REQUIRES_COMPONENTS = Path("data/processed/components.parquet").exists()
+_REQUIRES_SPREAD = Path("data/market/brent_spread.csv").exists()
+
+
+def _ensure_dataset():
+    if not (_REQUIRES_COMPONENTS and _REQUIRES_SPREAD):
+        pytest.skip("Spread dataset missing; run `spvx.cli compute-index` and prepare market data.")
+
 
 def test_prepare_dataset_alignment():
+    _ensure_dataset()
     features, y, spread_fwd, _ = _prepare_dataset()
     assert not features.empty
     assert features.index.equals(y.index)
@@ -19,6 +30,7 @@ def test_prepare_dataset_alignment():
 
 
 def test_time_series_split_gap():
+    _ensure_dataset()
     features, *_ = _prepare_dataset()
     splitter = _time_series_split(len(features), n_splits=5, gap=7, test_size=30)
     for train_idx, test_idx in splitter.split(np.arange(len(features))):
@@ -42,6 +54,7 @@ def test_probability_damping():
 
 
 def test_fallback_signal_high_volatility_triggers_neutral():
+    _ensure_dataset()
     features, _, _, artefacts = _prepare_dataset()
     series = artefacts["spread"]
     vol_series = _compute_volatility(series)

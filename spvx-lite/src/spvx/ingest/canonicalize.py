@@ -88,10 +88,17 @@ def tanker_flag(shiptype_num: Optional[int], shiptype_str: Optional[str]) -> boo
     return False
 
 
-def canonicalize(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def canonicalize(payload: Dict[str, Any], db_conn: Optional[Any] = None) -> Optional[Dict[str, Any]]:
     """
     Normalize the incoming AIS payload. Returns a dict to insert into `ais_canon`
     or None if the message is invalid.
+
+    Args:
+        payload: Raw AIS message
+        db_conn: Optional DuckDB connection for ship registry lookup
+
+    Returns:
+        Canonical AIS dict or None
     """
     message = payload.get("Message") or {}
     report = message.get("PositionReport") or {}
@@ -114,14 +121,15 @@ def canonicalize(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _valid_lat_lon(lat, lon):
         return None
 
-    sog = _safe_float(report.get("Sog") or report.get("SOG"))
+    sog = _safe_float(report.get("Sog") if report.get("Sog") is not None else report.get("SOG"))
     if sog is None or sog < 0 or sog > 40:
         return None
 
-    cog = _safe_float(report.get("Cog") or report.get("COG"))
+    cog = _safe_float(report.get("Cog") if report.get("Cog") is not None else report.get("COG"))
     if cog is not None and (cog < 0 or cog > 360):
         cog = None
 
+    # Try to get shiptype from the message itself (rarely works for position reports)
     shiptype_num = None
     for key in ("ShipType", "shipType", "ShipTypeCode"):
         value = report.get(key) or payload.get(key) or message.get(key)
@@ -134,6 +142,22 @@ def canonicalize(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             continue
 
     shiptype_str = _shiptype_string(payload)
+
+    # If no shiptype in message and we have a DB connection, look up from ship registry
+    if shiptype_num is None and db_conn is not None:
+        try:
+            ship_info = db_conn.execute(
+                "SELECT shiptype_num, shiptype_str FROM ship_registry WHERE mmsi = ?",
+                [mmsi_str]
+            ).fetchone()
+            if ship_info:
+                shiptype_num = ship_info[0]
+                if shiptype_str is None:
+                    shiptype_str = ship_info[1]
+        except Exception:
+            # Table might not exist yet or other DB error
+            pass
+
     is_tanker = tanker_flag(shiptype_num, shiptype_str)
 
     return {

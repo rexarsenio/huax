@@ -9,8 +9,18 @@ import json
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import requests
+import pytest
 
 load_dotenv()
+
+
+@pytest.fixture(scope="module")
+def token():
+    """Obtain an OAuth token once per test module."""
+    token_value = test_authentication()
+    if token_value is None:
+        pytest.skip("NXTPort credentials not configured; skipping API diagnostics.")
+    return token_value
 
 def test_authentication():
     """Test OAuth2 token retrieval"""

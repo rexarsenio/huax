@@ -2,39 +2,49 @@ import { useCallback, useMemo, useState } from "react";
 import { Card } from "../components/Card";
 import { Skeleton } from "../components/Skeleton";
 import { TimeSeriesChart } from "../components/TimeSeriesChart";
-import { SignalSummary } from "../components/SignalSummary";
-import { MetaHero } from "../components/MetaHero";
+import { ChokepointTable } from "../components/ChokepointTable";
+import { OpenSeaPanel } from "../components/OpenSeaPanel";
+import { MarketContext } from "../components/MarketContext";
+import { ComponentCard } from "../components/ComponentCard";
+import { HeroKpi } from "../components/HeroKpi";
 import {
+  useLatestIndex,
   useGlobalIndex,
   useBasinIndex,
   useBasinComponents,
-  useSpreadSignals,
-  useThroughputNowcast,
   useOpsHealth,
+  useSignalsSnapshot,
 } from "../hooks/useApi";
-import type { Basin, ComponentPoint } from "../api/types";
+import type {
+  Basin,
+  ComponentPoint,
+  GlobalIndexPoint,
+  BasinIndexPoint,
+  RelativeStressPayload,
+} from "../api/types";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
 import { downloadBasinCsv } from "../api/client";
+import { appConfig } from "../config";
 
-const BASINS: Basin[] = ["GLOBAL", "EUR", "APAC", "NAM", "SAM"];
+const BASINS: Basin[] = ["GLOBAL", "APAC", "NAM", "SAM", "MED"];
 
 const BASIN_LABELS: Record<Basin, string> = {
   GLOBAL: "Global",
-  EUR: "Europe",
   APAC: "APAC",
   NAM: "North America",
   SAM: "South America",
+  MED: "Mediterranean",
 };
 
 const BASIN_COMPONENTS: Partial<Record<Basin, string[]>> = {
-  EUR: ["CQ_TR", "PORT_EU"],
-  APAC: ["CQ_SG", "CQ_HRZ"],
+  APAC: ["CQ_SG", "CQ_HRZ", "CQ_TR", "PORT_EU"],
   NAM: ["CQ_PAN", "PORT_US"],
   SAM: ["CQ_PAN_S", "PORT_BR"],
+  MED: ["CQ_SUEZ", "CQ_GIBRALTAR", "PORT_MED"],
 };
 
-const BETA_BASINS = new Set<Basin>(["SAM"]);
+const BETA_BASINS = new Set<Basin>(["SAM", "MED"]);
 
 type LatestIndexCardProps = {
   title: string;
@@ -43,11 +53,51 @@ type LatestIndexCardProps = {
   previous?: number;
   loading: boolean;
   weatherFlag?: number;
+  relativeStress?: RelativeStressPayload;
+  latestPoint?: IndexPoint;
 };
 
-const LatestIndexCard = ({ title, subtitle, value, previous, loading, weatherFlag }: LatestIndexCardProps) => {
+const ordinal = (value: number) => {
+  const rank = Math.round(value);
+  if (10 <= rank % 100 && rank % 100 <= 20) {
+    return `${rank}th`;
+  }
+  const suffixMap: Record<number, string> = { 1: "st", 2: "nd", 3: "rd" };
+  const suffix = suffixMap[rank % 10] ?? "th";
+  return `${rank}${suffix}`;
+};
+
+const LatestIndexCard = ({
+  title,
+  subtitle,
+  value,
+  previous,
+  loading,
+  weatherFlag,
+  relativeStress,
+  latestPoint,
+}: LatestIndexCardProps) => {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const stressLatest = relativeStress?.latest;
+  const narrative = relativeStress?.narrative;
+  const historyPreview = relativeStress?.history?.slice(-5) ?? [];
+  const baseline =
+    stressLatest?.seasonal_mean != null ? stressLatest.seasonal_mean : undefined;
+  const pointMetrics =
+    latestPoint as { data_gap_ratio?: number | null; ingest_lag_seconds?: number | null } | undefined;
+  const dataGapRatio =
+    stressLatest?.data_gap_ratio != null
+      ? stressLatest.data_gap_ratio
+      : pointMetrics?.data_gap_ratio != null
+      ? pointMetrics.data_gap_ratio
+      : undefined;
+  const ingestLagSeconds =
+    stressLatest?.ingest_lag_seconds != null
+      ? stressLatest.ingest_lag_seconds
+      : pointMetrics?.ingest_lag_seconds != null
+      ? pointMetrics.ingest_lag_seconds
+      : undefined;
 
   if (loading) {
     return (
@@ -68,46 +118,159 @@ const LatestIndexCard = ({ title, subtitle, value, previous, loading, weatherFla
   const formattedValue = value.toLocaleString(locale, { maximumFractionDigits: 2 });
   const delta = previous !== undefined ? value - previous : undefined;
   const pct = previous !== undefined && previous !== 0 ? (delta! / previous) * 100 : undefined;
+  const percentileLabel =
+    stressLatest?.percentile != null ? ordinal(stressLatest.percentile) : undefined;
+  const deviationLabel =
+    stressLatest?.deviation_pct != null
+      ? `${stressLatest.deviation_pct >= 0 ? "+" : ""}${stressLatest.deviation_pct.toFixed(1)}%`
+      : undefined;
+  const zScoreLabel = stressLatest ? `${stressLatest.z_score >= 0 ? "+" : ""}${stressLatest.z_score.toFixed(1)}σ` : undefined;
+  const baselineLabel =
+    stressLatest?.seasonal_mean != null
+      ? `${stressLatest.seasonal_mean.toLocaleString(locale, { maximumFractionDigits: 1 })}${
+          stressLatest.seasonal_label ? ` · ${stressLatest.seasonal_label}` : ""
+        }`
+      : undefined;
 
   return (
     <Card title={title} subtitle={subtitle}>
-      <div className="flex flex-wrap items-end gap-4">
-        <div>
-          <p className="text-4xl font-semibold">{formattedValue}</p>
-          <p className="text-sm text-foreground/50">{t("dashboard.latestIndex.label")}</p>
-        </div>
-        {delta !== undefined && pct !== undefined && Number.isFinite(pct) && (
-          <div
-            className={clsx(
-              "rounded-xl px-3 py-2 text-sm font-medium",
-              delta >= 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
-            )}
-          >
-            {delta >= 0 ? "+" : ""}
-            {delta.toFixed(2)} ({pct >= 0 ? "+" : ""}
-            {pct.toFixed(2)}%)
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <p className="text-4xl font-semibold">{formattedValue}</p>
+            <p className="text-sm text-foreground/50">{t("dashboard.latestIndex.label")}</p>
           </div>
-        )}
-        {weatherFlag && weatherFlag > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-xl bg-warning/10 px-3 py-2 text-sm font-medium text-warning">
-            ⚠ {t("dashboard.weather.flag", { defaultValue: "Weather flag active" })}
-          </span>
-        )}
+          {delta !== undefined && pct !== undefined && Number.isFinite(pct) && (
+            <div
+              className={clsx(
+                "rounded-xl px-3 py-2 text-sm font-medium",
+                delta >= 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+              )}
+            >
+              {delta >= 0 ? "+" : ""}
+              {delta.toFixed(2)} ({pct >= 0 ? "+" : ""}
+                  {pct.toFixed(2)}%)
+            </div>
+          )}
+          {weatherFlag && weatherFlag > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-xl bg-warning/10 px-3 py-2 text-sm font-medium text-warning">
+              ⚠ {t("dashboard.weather.flag", { defaultValue: "Weather flag active" })}
+            </span>
+          )}
+        </div>
+        <div className="space-y-3">
+          {stressLatest ? (
+            <>
+              <div className="space-y-2 rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl" aria-hidden>
+                    {stressLatest.classification.emoji ?? "•"}
+                  </span>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide">
+                      {stressLatest.classification.status}
+                    </p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {narrative?.headline ?? stressLatest.classification.headline ?? ""}
+                    </p>
+                    <p className="text-sm text-foreground/70">
+                      {narrative?.summary ??
+                        t("dashboard.latestIndex.seasonalSummary", {
+                          defaultValue: "{{zScore}} · {{percentile}} percentile",
+                          zScore: zScoreLabel ?? "—",
+                          percentile: percentileLabel ?? "—",
+                        })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 text-xs text-foreground/70 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="text-center">
+                  <p className="uppercase tracking-wide text-foreground/50">
+                    {t("dashboard.latestIndex.zScore", { defaultValue: "Z-score" })}
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">{zScoreLabel ?? "—"}</p>
+                </div>
+                <div className="text-center">
+                  <p className="uppercase tracking-wide text-foreground/50">
+                    {t("dashboard.latestIndex.percentile", { defaultValue: "Percentile" })}
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {percentileLabel
+                      ? `${percentileLabel}${stressLatest.lookback_samples ? ` · ${stressLatest.lookback_samples}d` : ""}`
+                      : "—"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="uppercase tracking-wide text-foreground/50">
+                    {t("dashboard.latestIndex.baseline", { defaultValue: "Seasonal baseline" })}
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">{baselineLabel ?? "—"}</p>
+                </div>
+                <div className="text-center">
+                  <p className="uppercase tracking-wide text-foreground/50">
+                    {t("dashboard.latestIndex.deviation", { defaultValue: "Deviation" })}
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">{deviationLabel ?? "—"}</p>
+                </div>
+              </div>
+              {historyPreview.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-foreground/50">
+                    {t("dashboard.latestIndex.history", { defaultValue: "Recent seasonal context" })}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {historyPreview.map((row) => {
+                      const dateLabel = new Date(row.date).toLocaleDateString(locale, {
+                        month: "short",
+                        day: "numeric",
+                      });
+                      const valueLabel = Number.isFinite(row.value)
+                        ? row.value.toLocaleString(locale, { maximumFractionDigits: 1 })
+                        : "—";
+                      const rowZ =
+                        row.z_score != null
+                          ? `${row.z_score >= 0 ? "+" : ""}${row.z_score.toFixed(1)}σ`
+                          : "—";
+                      return (
+                        <div
+                          key={row.date}
+                          className="rounded-lg border border-foreground/10 bg-background/80 px-3 py-2 text-xs"
+                        >
+                          <p className="text-sm font-semibold text-foreground">{valueLabel}</p>
+                          <p className="text-foreground/60">{dateLabel}</p>
+                          <p className="text-foreground/50">{rowZ}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm text-foreground/70">
+              {t("dashboard.latestIndex.contextUnavailable", {
+                defaultValue: "Seasonal context unavailable. Awaiting baseline calibration.",
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </Card>
   );
 };
 
-const extractValue = (point: unknown): number | undefined => {
-  if (!point || typeof point !== "object") {
+type IndexPoint = GlobalIndexPoint | BasinIndexPoint;
+
+const extractValue = (point: IndexPoint | undefined): number | undefined => {
+  if (!point) {
     return undefined;
   }
-  const candidate = point as Record<string, unknown>;
-  if (typeof candidate["spvx_global"] === "number") {
-    return candidate["spvx_global"] as number;
+  if ("spvx_global" in point && typeof point.spvx_global === "number") {
+    return point.spvx_global;
   }
-  if (typeof candidate["spvx_basin"] === "number") {
-    return candidate["spvx_basin"] as number;
+  if ("spvx_basin" in point && typeof point.spvx_basin === "number") {
+    return point.spvx_basin;
   }
   return undefined;
 };
@@ -141,15 +304,17 @@ export const DashboardPage = () => {
   const globalIndexQuery = useGlobalIndex(rangeParam);
   const basinIndexQuery = useBasinIndex(basin, rangeParam);
   const componentsQuery = useBasinComponents(basin, componentsRange);
-  const spreadQuery = useSpreadSignals();
-  const throughputQuery = useThroughputNowcast();
   const opsHealthQuery = useOpsHealth();
+  const overviewV16 = Boolean(appConfig.features?.overviewV16);
+  const latestIndexQuery = useLatestIndex("global", overviewV16);
+  const signalsSnapshotQuery = useSignalsSnapshot();
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const refreshSeconds = appConfig.refreshSeconds;
 
   const isGlobal = basin === "GLOBAL";
   const indexData = isGlobal ? globalIndexQuery.data : basinIndexQuery.data;
-  const indexSeries = indexData?.series ?? [];
+  const indexSeries = (indexData?.series ?? []) as IndexPoint[];
   const chartSeries = useMemo(
     () =>
       indexSeries
@@ -161,19 +326,64 @@ export const DashboardPage = () => {
     [indexSeries],
   );
 
-  const latestPoint = indexData?.latest ?? indexSeries.at(-1);
+  const latestPoint: IndexPoint | undefined =
+    (indexData?.latest as IndexPoint | undefined) ?? indexSeries.at(-1);
   const previousPoint = indexSeries.length > 1 ? indexSeries[indexSeries.length - 2] : undefined;
   const latestValue = extractValue(latestPoint);
   const previousValue = extractValue(previousPoint);
-  const latestDate = latestPoint && typeof latestPoint === "object" ? (latestPoint as Record<string, string>).d : undefined;
+  const latestDate = latestPoint?.d;
   const latestSubtitle = latestDate ? new Date(latestDate).toLocaleDateString(locale) : undefined;
   const basinLabel = t(`dashboard.basins.${basin.toLowerCase()}`, {
     defaultValue: BASIN_LABELS[basin] ?? basin,
   });
-  const latestWeatherFlag =
-    latestPoint && typeof latestPoint === "object" && typeof (latestPoint as Record<string, unknown>).weather_flag === "number"
-      ? Number((latestPoint as Record<string, unknown>).weather_flag)
-      : 0;
+  const latestWeatherFlag = typeof latestPoint?.weather_flag === "number" ? latestPoint.weather_flag ?? 0 : 0;
+  const relativeStress = indexData?.relative_stress;
+  const heroSnapshot = latestIndexQuery.data;
+  const heroLoading = latestIndexQuery.isLoading || (latestIndexQuery.isFetching && !latestIndexQuery.data);
+  const heroError = latestIndexQuery.isError;
+  const signalsAsOf = signalsSnapshotQuery.data?.asof ?? null;
+  const heroTimestamp = heroSnapshot?.ts ?? null;
+  const heroAsOfRaw = useMemo(() => {
+    const candidates = [heroTimestamp, signalsAsOf].filter(Boolean) as string[];
+    if (candidates.length === 0) {
+      return null;
+    }
+    const sorted = candidates
+      .map((value) => ({ value, date: new Date(value) }))
+      .filter((item) => !Number.isNaN(item.date.getTime()))
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+    return sorted[0]?.value ?? candidates[0];
+  }, [heroTimestamp, signalsAsOf]);
+  const heroAsOfDate = useMemo(() => {
+    if (!heroAsOfRaw) {
+      return null;
+    }
+    const parsed = new Date(heroAsOfRaw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [heroAsOfRaw]);
+  const heroAsOfUtc = useMemo(() => {
+    if (!heroAsOfDate) {
+      return null;
+    }
+    return new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+      hourCycle: "h23",
+    }).format(heroAsOfDate);
+  }, [heroAsOfDate, locale]);
+  const heroIsStale = useMemo(() => {
+    if (!heroAsOfDate) {
+      return false;
+    }
+    const diffMs = Date.now() - heroAsOfDate.getTime();
+    const twoDays = 48 * 60 * 60 * 1000;
+    return diffMs > twoDays;
+  }, [heroAsOfDate]);
 
   const componentsData = componentsQuery.data?.series ?? [];
   const { map: latestComponentMap } = useMemo(() => buildComponentMap(componentsData), [componentsData]);
@@ -262,12 +472,47 @@ export const DashboardPage = () => {
     }
   }, [basin, rangeParam]);
 
-  const spreadSeries = Array.isArray(spreadQuery.data?.series) ? spreadQuery.data!.series : [];
-  const throughputSeries = Array.isArray(throughputQuery.data?.series) ? throughputQuery.data!.series : [];
-
   return (
-    <div className="space-y-6">
-      <MetaHero />
+    <div className="space-y-8 max-w-[1600px] mx-auto">
+
+      {overviewV16 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-foreground/60">
+          {heroLoading ? (
+            <Skeleton className="h-6 w-48 rounded-full" />
+          ) : heroAsOfUtc ? (
+            <span
+              className={clsx(
+                "inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium",
+                heroIsStale ? "bg-warning/10 text-warning" : "bg-foreground/10 text-foreground/80",
+              )}
+            >
+              {heroIsStale
+                ? t("dashboard.refresh.stale", {
+                    defaultValue: "Stale since {{datetime}}",
+                    datetime: heroAsOfUtc,
+                  })
+                : t("dashboard.refresh.asOf", {
+                    defaultValue: "As of {{datetime}}",
+                    datetime: heroAsOfUtc,
+                  })}
+            </span>
+          ) : null}
+          <span className="inline-flex items-center gap-2 rounded-full bg-foreground/5 px-3 py-1 text-xs uppercase tracking-wide text-foreground/60">
+            {t("dashboard.refresh.auto", { defaultValue: "Auto-refresh ✓" })}
+            <span className="font-mono text-foreground/50">
+              {refreshSeconds >= 60
+                ? t("dashboard.refresh.intervalMinutes", {
+                    defaultValue: "{{minutes}} min",
+                    minutes: Math.round(refreshSeconds / 60),
+                  })
+                : t("dashboard.refresh.intervalSeconds", {
+                    defaultValue: "{{seconds}} s",
+                    seconds: refreshSeconds,
+                  })}
+            </span>
+          </span>
+        </div>
+      )}
 
       {opsStatusLine && (
         <div
@@ -311,14 +556,27 @@ export const DashboardPage = () => {
         })}
       </div>
 
-      <LatestIndexCard
-        title={`${t("dashboard.latestIndex.title")} · ${basinLabel}`}
-        subtitle={latestSubtitle}
-        value={latestValue}
-        previous={previousValue}
-        loading={isGlobal ? globalIndexQuery.isLoading : basinIndexQuery.isLoading}
-        weatherFlag={latestWeatherFlag}
-      />
+      {overviewV16 ? (
+        <HeroKpi
+          data={heroSnapshot}
+          isLoading={heroLoading}
+          isError={heroError}
+          onRetry={() => latestIndexQuery.refetch()}
+          asOf={heroAsOfRaw}
+          isStale={heroIsStale}
+        />
+      ) : (
+        <LatestIndexCard
+          title={`${t("dashboard.latestIndex.title")} · ${basinLabel}`}
+          subtitle={latestSubtitle}
+          value={latestValue}
+          previous={previousValue}
+          loading={isGlobal ? globalIndexQuery.isLoading : basinIndexQuery.isLoading}
+          weatherFlag={latestWeatherFlag}
+          relativeStress={relativeStress}
+          latestPoint={latestPoint}
+        />
+      )}
 
       <Card
         title={t("dashboard.indexPerformance.title")}
@@ -351,10 +609,17 @@ export const DashboardPage = () => {
           </div>
         }
       >
-        {((isGlobal ? globalIndexQuery.isLoading : basinIndexQuery.isLoading) || chartSeries.length === 0) ? (
+        {(isGlobal ? globalIndexQuery.isLoading : basinIndexQuery.isLoading) ? (
           <Skeleton className="h-72 w-full" />
+        ) : chartSeries.length === 0 ? (
+          <div className="flex h-72 items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-lg font-medium text-foreground/70">⏳ {t("dashboard.indexPerformance.collecting", { defaultValue: "Historical data is being collected" })}</p>
+              <p className="text-sm text-foreground/50">{t("dashboard.indexPerformance.collectingHint", { defaultValue: "Chart will display once sufficient data is available" })}</p>
+            </div>
+          </div>
         ) : (
-          <TimeSeriesChart data={chartSeries} label={basinLabel} />
+          <TimeSeriesChart data={chartSeries} label={basinLabel} relativeStress={relativeStress} />
         )}
       </Card>
 
@@ -363,90 +628,48 @@ export const DashboardPage = () => {
           {componentsQuery.isLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {componentList.map((comp) => {
-            const entry = latestComponentMap.get(comp);
-            const zValue = entry?.z_value ?? null;
-            const trend = componentTrend.get(comp) ?? 0;
-            const weatherFlag = entry?.weather_flag ?? 0;
-            const direction = zValue == null ? "" : trend > 0.1 ? "▲" : trend < -0.1 ? "▼" : "•";
-            const chipClass = zValue == null
-              ? "bg-foreground/5 text-foreground/60"
-              : zValue >= 0
-              ? "bg-success/10 text-success"
-              : "bg-danger/10 text-danger";
-            const baseClasses = clsx("rounded-2xl px-3 py-1 text-sm font-medium", chipClass);
-            const className = weatherFlag
-              ? clsx(baseClasses, "ring-2 ring-warning/70")
-              : baseClasses;
-            const tooltip = entry
-              ? `${comp}: ${zValue?.toFixed(2) ?? "n/a"} (${t("dashboard.components.observations", { defaultValue: "n_obs" })}: ${entry.n_obs ?? 0})`
-              : `${comp}: n/a`;
-            return (
-              <span key={comp} className={className} title={tooltip}>
-                {comp}: {zValue != null ? zValue.toFixed(2) : "n/a"} {direction} {weatherFlag ? "⚠" : ""}
-              </span>
-            );
-          })}
+                const entry = latestComponentMap.get(comp);
+                const zValue = entry?.z_value ?? null;
+                const rawValue = entry?.raw_value ?? null;
+                const trend = componentTrend.get(comp) ?? 0;
+                const weatherFlag = entry?.weather_flag ?? 0;
+                const observations = entry?.n_obs ?? 0;
+                const seasonalMean = entry?.seasonal_mean ?? null;
+                const deviationPct = entry?.deviation_pct ?? null;
+                const classification = entry?.classification ?? null;
+
+                return (
+                  <ComponentCard
+                    key={comp}
+                    name={comp}
+                    value={rawValue}
+                    zScore={zValue}
+                    trend={trend}
+                    weatherFlag={weatherFlag}
+                    observations={observations}
+                    seasonalMean={seasonalMean ?? undefined}
+                    deviationPct={deviationPct ?? undefined}
+                    classification={classification ?? undefined}
+                  />
+                );
+              })}
               {componentList.length === 0 && (
-                <p className="text-sm text-foreground/60">{t("dashboard.components.noConfig", { defaultValue: "No component configuration available." })}</p>
+                <p className="text-sm text-foreground/60">
+                  {t("dashboard.components.noConfig", {
+                    defaultValue: "No component configuration available.",
+                  })}
+                </p>
               )}
             </div>
           )}
         </Card>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <SignalSummary />
-        <Card title={t("dashboard.modelActivity.title")} subtitle={t("dashboard.modelActivity.subtitle")}>
-          {spreadQuery.isLoading && throughputQuery.isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <div className="space-y-4 text-sm">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-foreground/60 mb-1">{t("dashboard.modelActivity.spread")}</p>
-                <div className="space-y-1 text-foreground/70">
-                  {spreadSeries.length > 0
-                    ? spreadSeries.slice(-5).map((row, idx) => {
-                        const dateLabel = String(row["date"] ?? t("dashboard.modelActivity.placeholder"));
-                        const probValue = row["prob_up"];
-                        const prob =
-                          typeof probValue === "number"
-                            ? probValue.toFixed(2)
-                            : t("dashboard.modelActivity.placeholder");
-                        return (
-                          <span key={idx} className="block">
-                            {dateLabel}: {prob}
-                          </span>
-                        );
-                      })
-                    : t("dashboard.modelActivity.placeholder")}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-foreground/60 mb-1">{t("dashboard.modelActivity.throughput")}</p>
-                <div className="space-y-1 text-foreground/70">
-                  {throughputSeries.length > 0
-                    ? throughputSeries.slice(-5).map((row, idx) => {
-                        const dateLabel = String(row["date"] ?? t("dashboard.modelActivity.placeholder"));
-                        const valueRaw = row["throughput_pred_72h"];
-                        const value =
-                          typeof valueRaw === "number"
-                            ? valueRaw.toFixed(2)
-                            : t("dashboard.modelActivity.placeholder");
-                        return (
-                          <span key={idx} className="block">
-                            {dateLabel}: {value}
-                          </span>
-                        );
-                      })
-                    : t("dashboard.modelActivity.placeholder")}
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-      </div>
+      <ChokepointTable />
+      <OpenSeaPanel />
+      <MarketContext />
     </div>
   );
 };

@@ -19,16 +19,21 @@ from spvx.etl.portwatch import fetch_portwatch_daily, upsert_portwatch_rows
 
 LOG = logging.getLogger(__name__)
 
+KNOTS_TO_MPS = 0.514444
+
 DWELL_REGIONS = {
     "CQ_SG": {"basin": "APAC", "regions": ["singapore_malacca"]},
     "CQ_HRZ": {"basin": "APAC", "regions": ["hormuz"]},
     "CQ_PAN_N": {"basin": "NAM", "regions": ["panama_n"]},
     "CQ_PAN_S": {"basin": "SAM", "regions": ["panama_s"]},
+    "CQ_SUEZ": {"basin": "MED", "regions": ["suez"]},
+    "CQ_GIBRALTAR": {"basin": "MED", "regions": ["gibraltar"]},
 }
 
 PORT_COMPONENTS = {
     "PORT_US": {"basin": "NAM", "ports": ["houston", "new_orleans", "south_louisiana"]},
     "PORT_BR": {"basin": "SAM", "ports": ["santos", "rio_de_janeiro"]},
+    "PORT_MED": {"basin": "MED", "ports": ["augusta", "gioia_tauro", "lavera", "piraeus"]},
 }
 
 # Ports that require broader name matching in the ArcGIS source.
@@ -38,6 +43,10 @@ PORTWATCH_ALIASES = {
     "south_louisiana": ["south louisiana", "port of south louisiana"],
     "santos": ["santos", "porto de santos"],
     "rio_de_janeiro": ["rio de janeiro", "porto do rio"],
+    "augusta": ["augusta", "porto di augusta"],
+    "gioia_tauro": ["gioia tauro", "porto di gioia tauro"],
+    "lavera": ["lavera", "port de lavera"],
+    "piraeus": ["piraeus", "piraiévs", "port of piraeus"],
 }
 
 BASELINE_FALLBACKS = {
@@ -95,29 +104,38 @@ def _load_portwatch(con: duckdb.DuckDBPyConnection) -> Dict[Tuple[str, dt.date],
     return data
 
 
-def _load_sea_currents(con: duckdb.DuckDBPyConnection) -> Dict[Tuple[str, dt.date], Tuple[float, int]]:
+def _load_sea_currents(
+    con: duckdb.DuckDBPyConnection,
+) -> Dict[Tuple[str, dt.date], Tuple[float, int, Optional[pd.Timestamp]]]:
     df = con.execute(
         """
         SELECT
             date(observed_at) AS d,
             upper(basin) AS basin,
-            AVG(speed_knots) AS avg_speed,
-            COUNT(*) AS n_rows
+            AVG(speed_knots) AS avg_speed_knots,
+            COUNT(*) AS n_rows,
+            MAX(observed_at) AS max_observed_at
         FROM sea_currents_daily
         GROUP BY 1, 2
         """
     ).df()
-    data: Dict[Tuple[str, dt.date], Tuple[float, int]] = {}
+    data: Dict[Tuple[str, dt.date], Tuple[float, int, Optional[pd.Timestamp]]] = {}
     if df.empty:
         return data
     df["d"] = pd.to_datetime(df["d"]).dt.date
     for row in df.itertuples(index=False):
         key = (str(row.basin or "").upper(), row.d)
-        data[key] = (float(row.avg_speed or 0.0), int(row.n_rows or 0))
+        ts = pd.to_datetime(row.max_observed_at) if getattr(row, "max_observed_at", None) is not None else None
+        if isinstance(ts, pd.Timestamp):
+            ts = ts.to_pydatetime()
+        speed_knots = float(row.avg_speed_knots or 0.0)
+        data[key] = (speed_knots, int(row.n_rows or 0), ts)
     return data
 
 
-def _load_sea_waves(con: duckdb.DuckDBPyConnection) -> Dict[Tuple[str, dt.date], Tuple[float, Optional[float], int]]:
+def _load_sea_waves(
+    con: duckdb.DuckDBPyConnection,
+) -> Dict[Tuple[str, dt.date], Tuple[float, Optional[float], int, Optional[pd.Timestamp]]]:
     df = con.execute(
         """
         SELECT
@@ -125,18 +143,27 @@ def _load_sea_waves(con: duckdb.DuckDBPyConnection) -> Dict[Tuple[str, dt.date],
             upper(basin) AS basin,
             AVG(hs_m) AS hs_m,
             AVG(tp_s) AS tp_s,
-            COUNT(*) AS n_rows
+            COUNT(*) AS n_rows,
+            MAX(observed_at) AS max_observed_at
         FROM sea_waves_daily
         GROUP BY 1, 2
         """
     ).df()
-    data: Dict[Tuple[str, dt.date], Tuple[float, Optional[float], int]] = {}
+    data: Dict[Tuple[str, dt.date], Tuple[float, Optional[float], int, Optional[pd.Timestamp]]] = {}
     if df.empty:
         return data
     df["d"] = pd.to_datetime(df["d"]).dt.date
     for row in df.itertuples(index=False):
         key = (str(row.basin or "").upper(), row.d)
-        data[key] = (float(row.hs_m or 0.0), float(row.tp_s) if row.tp_s is not None else None, int(row.n_rows or 0))
+        ts = pd.to_datetime(row.max_observed_at) if getattr(row, "max_observed_at", None) is not None else None
+        if isinstance(ts, pd.Timestamp):
+            ts = ts.to_pydatetime()
+        data[key] = (
+            float(row.hs_m or 0.0),
+            float(row.tp_s) if row.tp_s is not None else None,
+            int(row.n_rows or 0),
+            ts,
+        )
     return data
 
 
@@ -275,7 +302,7 @@ def _build_input_rows(
             for region in regions:
                 raw = dwell_map.get((region, date))
                 obs = dwell_obs.get((region, date))
-                key = f"{comp}:{cfg['basin']}" if comp in {"CQ_SG", "CQ_HRZ"} else None
+                key = f"{comp}:{cfg['basin']}" if comp in {"CQ_SG", "CQ_HRZ", "CQ_SUEZ", "CQ_GIBRALTAR"} else None
                 if comp == "CQ_PAN_N":
                     key = "CQ_PAN_N:NAM"
                 elif comp == "CQ_PAN_S":
@@ -298,7 +325,7 @@ def _build_input_rows(
                 obs += count
             rows.append((date, f"{comp}:{basin}", total if obs else None, obs if obs else None))
 
-        for basin in ("APAC", "NAM", "SAM"):
+        for basin in ("APAC", "NAM", "SAM", "MED"):
             curr_entry = sea_curr_map.get((basin, date))
             if curr_entry and curr_entry[1]:
                 rows.append((date, f"SEA_CURR:{basin}", curr_entry[0], curr_entry[1]))
@@ -317,8 +344,35 @@ def _build_component_row(
     z_value: Optional[float],
     missing_reason: Optional[str],
     weather_flag: int,
-) -> Tuple[dt.date, str, str, Optional[float], Optional[float], Optional[int], Optional[str], int]:
-    return (date, basin, comp, z_value, raw_value, n_obs, missing_reason, weather_flag)
+    sea_hs_z: Optional[float] = None,
+    sea_opp_current: Optional[float] = None,
+    sea_data_timestamp: Optional[dt.datetime] = None,
+) -> Tuple[
+    dt.date,
+    str,
+    str,
+    Optional[float],
+    Optional[float],
+    Optional[int],
+    Optional[str],
+    int,
+    Optional[float],
+    Optional[float],
+    Optional[dt.datetime],
+]:
+    return (
+        date,
+        basin,
+        comp,
+        z_value,
+        raw_value,
+        n_obs,
+        missing_reason,
+        weather_flag,
+        sea_hs_z,
+        sea_opp_current,
+        sea_data_timestamp,
+    )
 
 
 def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
@@ -348,7 +402,15 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
             aliases = PORTWATCH_ALIASES.get(canonical, [canonical])
             if any(alias.lower().replace(" ", "_") in existing_codes for alias in aliases):
                 continue
-            iso3 = "USA" if component["basin"] == "NAM" else "BRA"
+            if component["basin"] == "NAM":
+                iso3 = "USA"
+            elif component["basin"] == "SAM":
+                iso3 = "BRA"
+            elif component["basin"] == "MED":
+                # Mediterranean ports - cycle through relevant countries
+                iso3 = "ITA"  # Will be overridden per port below
+            else:
+                iso3 = "USA"  # fallback
             all_rows: List = []
             for alias in aliases:
                 rows = fetch_portwatch_daily(iso3=iso3, port_like=alias)
@@ -381,7 +443,19 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
     baseline_map = _fetch_baselines(con)
 
     component_rows: List[
-        Tuple[dt.date, str, str, Optional[float], Optional[float], Optional[int], Optional[str], int]
+        Tuple[
+            dt.date,
+            str,
+            str,
+            Optional[float],
+            Optional[float],
+            Optional[int],
+            Optional[str],
+            int,
+            Optional[float],
+            Optional[float],
+            Optional[dt.datetime],
+        ]
     ] = []
 
     for date in all_dates:
@@ -516,12 +590,73 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
         )
         sam_flag = pan_s_flag
 
+        # MED components
+        suez_raw = dwell_map.get(("suez", date))
+        suez_obs = dwell_obs.get(("suez", date))
+        suez_mean, suez_std = _lookup_baseline(baseline_map, "CQ_SUEZ", "MED", doy)
+        suez_z = _compute_z(suez_raw, suez_mean, suez_std)
+        suez_reason = None
+        if suez_z is None:
+            if suez_raw is None:
+                suez_reason = "no_data"
+            elif suez_std in (None, 0):
+                suez_reason = "baseline_missing"
+        suez_flag = weather_flags.get(("suez", date), 0)
+        component_rows.append(
+            _build_component_row(date, "MED", "CQ_SUEZ", suez_raw, suez_obs, suez_z, suez_reason, suez_flag)
+        )
+
+        gib_raw = dwell_map.get(("gibraltar", date))
+        gib_obs = dwell_obs.get(("gibraltar", date))
+        gib_mean, gib_std = _lookup_baseline(baseline_map, "CQ_GIBRALTAR", "MED", doy)
+        gib_z = _compute_z(gib_raw, gib_mean, gib_std)
+        gib_reason = None
+        if gib_z is None:
+            if gib_raw is None:
+                gib_reason = "no_data"
+            elif gib_std in (None, 0):
+                gib_reason = "baseline_missing"
+        gib_flag = weather_flags.get(("gibraltar", date), 0)
+        component_rows.append(
+            _build_component_row(date, "MED", "CQ_GIBRALTAR", gib_raw, gib_obs, gib_z, gib_reason, gib_flag)
+        )
+
+        port_med_total = 0.0
+        port_med_count = 0
+        for code in PORT_COMPONENTS["PORT_MED"]["ports"]:
+            value, count = port_map.get((code, date), (0.0, 0))
+            port_med_total += value
+            port_med_count += count
+        port_med_mean, port_med_std = _lookup_baseline(baseline_map, "PORT_MED", "MED", doy)
+        port_med_raw = port_med_total if port_med_count else None
+        port_med_z = _compute_z(port_med_raw, port_med_mean, port_med_std, sign=-1.0)
+        port_med_reason = None
+        if port_med_z is None:
+            if port_med_raw is None:
+                port_med_reason = "no_data"
+            else:
+                port_med_reason = "baseline_missing"
+        component_rows.append(
+            _build_component_row(
+                date,
+                "MED",
+                "PORT_MED",
+                port_med_raw,
+                port_med_count,
+                port_med_z,
+                port_med_reason,
+                max(suez_flag, gib_flag),
+            )
+        )
+        med_flag = max(suez_flag, gib_flag)
+
         # Sea-state components
-        for basin, flag_value in (("APAC", apac_flag), ("NAM", nam_flag), ("SAM", sam_flag)):
+        for basin, flag_value in (("APAC", apac_flag), ("NAM", nam_flag), ("SAM", sam_flag), ("MED", med_flag)):
             curr_entry = sea_curr_map.get((basin, date))
             if curr_entry and curr_entry[1]:
                 curr_raw = curr_entry[0]
                 curr_obs = curr_entry[1]
+                curr_ts = curr_entry[2]
                 curr_mean, curr_std = _lookup_baseline(baseline_map, "SEA_CURR", basin, doy)
                 curr_z = _compute_z(curr_raw, curr_mean, curr_std)
                 component_rows.append(
@@ -534,6 +669,8 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
                         curr_z,
                         None if curr_z is not None else "baseline_missing",
                         flag_value,
+                        sea_opp_current=curr_raw * KNOTS_TO_MPS if curr_raw is not None else None,
+                        sea_data_timestamp=curr_ts,
                     )
                 )
 
@@ -541,6 +678,7 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
             if wave_entry and wave_entry[2]:
                 wave_raw = wave_entry[0]
                 wave_obs = wave_entry[2]
+                wave_ts = wave_entry[3]
                 wave_mean, wave_std = _lookup_baseline(baseline_map, "SEA_WAVE", basin, doy)
                 wave_z = _compute_z(wave_raw, wave_mean, wave_std)
                 component_rows.append(
@@ -553,19 +691,36 @@ def build_components_daily(con: duckdb.DuckDBPyConnection) -> int:
                         wave_z,
                         None if wave_z is not None else "baseline_missing",
                         flag_value,
+                        sea_hs_z=wave_z,
+                        sea_data_timestamp=wave_ts,
                     )
                 )
 
     con.executemany(
         """
-        INSERT INTO components_daily (d, basin, comp, z_value, raw_value, n_obs, missing_reason, weather_flag)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO components_daily (
+            d,
+            basin,
+            comp,
+            z_value,
+            raw_value,
+            n_obs,
+            missing_reason,
+            weather_flag,
+            sea_hs_z,
+            sea_opp_current,
+            sea_data_timestamp
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (d, basin, comp) DO UPDATE SET
             z_value = excluded.z_value,
             raw_value = excluded.raw_value,
             n_obs = excluded.n_obs,
             missing_reason = excluded.missing_reason,
-            weather_flag = excluded.weather_flag
+            weather_flag = excluded.weather_flag,
+            sea_hs_z = excluded.sea_hs_z,
+            sea_opp_current = excluded.sea_opp_current,
+            sea_data_timestamp = excluded.sea_data_timestamp
         """,
         component_rows,
     )

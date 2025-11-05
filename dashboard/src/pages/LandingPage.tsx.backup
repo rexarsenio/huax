@@ -1,0 +1,177 @@
+import { useRef, useState } from "react";
+import { motion, useScroll } from "motion/react";
+
+import { OilTankerParallax } from "../components/landing/OilTankerParallax";
+import huaxLogo from "../assets/landing/huaxlogo.png";
+import { appConfig } from "../config";
+
+export const LandingPage = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"],
+  });
+
+  return (
+    <div ref={containerRef} className="relative min-h-screen bg-white text-gray-900">
+      <OilTankerParallax scrollYProgress={scrollYProgress} />
+
+      <section className="relative flex min-h-[75vh] items-center justify-center px-5 pb-16 md:h-screen md:px-6 md:pb-0">
+        <motion.div
+          className="z-10 mx-auto max-w-4xl space-y-8 text-center"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+        >
+          <div className="relative mt-24 sm:mt-32 md:mt-48 lg:mt-56">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 1 }}
+            >
+              <motion.img
+                src={huaxLogo}
+                alt="HUAX Logo"
+                className="mx-auto mb-6 w-32 sm:w-36 md:mb-7 md:w-48"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+              />
+              <div className="group relative mx-auto w-fit">
+                <div className="pointer-events-none absolute inset-0 rounded-[32px] border border-white/50 bg-white/30 opacity-0 blur-[22px] transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="pointer-events-none absolute inset-0 rounded-[32px] bg-white/10 opacity-0 backdrop-blur-xl transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="relative z-10 px-6 py-4 sm:px-8 sm:py-6">
+                  <h1 className="text-3xl font-semibold tracking-tight text-[#0b1d3a] sm:text-4xl md:text-5xl">
+                    Intelligent Maritime Signals
+                  </h1>
+                </div>
+              </div>
+              <div className="group relative mx-auto mt-5 max-w-2xl">
+                <div className="pointer-events-none absolute inset-0 rounded-[32px] border border-white/50 bg-white/30 opacity-0 blur-[24px] transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="pointer-events-none absolute inset-0 rounded-[32px] bg-white/12 opacity-0 backdrop-blur-xl transition-opacity duration-500 group-hover:opacity-100" />
+                <p className="relative z-10 px-5 py-4 text-base leading-relaxed text-[#10254d] sm:px-6 sm:py-5">
+                  We&rsquo;re charting a new course for energy intelligence&mdash;real-time tanker movement
+                  analytics, global chokepoint visibility, and actionable signals for market leaders.
+                </p>
+              </div>
+              <motion.form
+                className="mx-auto mt-6 flex w-full max-w-md flex-col gap-3 rounded-[28px] border border-white/40 bg-white/12 px-5 py-5 shadow-[0_18px_45px_rgba(11,29,58,0.15)] backdrop-blur-xl sm:flex-row sm:items-center sm:gap-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.1, duration: 0.8 }}
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (!email.trim() || status === "loading") {
+                    return;
+                  }
+                  setStatus("loading");
+                  try {
+                    const response = await fetch(`${appConfig.apiBaseUrl}/api/landing/waitlist`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email, source: "landing-page" }),
+                    });
+                    if (!response.ok) {
+                      throw new Error(`Unexpected status ${response.status}`);
+                    }
+                    setEmail("");
+                    setStatus("success");
+                  } catch (exc) {
+                    console.warn("Landing waitlist submission failed", exc);
+                    setStatus("error");
+                  }
+                }}
+              >
+                <label htmlFor="landing-email" className="sr-only">
+                  E-Mail-Adresse
+                </label>
+                <input
+                  id="landing-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    if (status !== "idle") {
+                      setStatus("idle");
+                    }
+                  }}
+                  placeholder="dein.name@unternehmen.com"
+                  className="w-full rounded-full border border-[#112a5b]/30 bg-white/90 px-4 py-2 text-sm text-[#0b1d3a] outline-none transition focus:border-[#0b1d3a] focus:ring-2 focus:ring-[#0b1d3a]/20"
+                />
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#0b1d3a] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-[#0a1730] disabled:opacity-60"
+                  disabled={status === "loading"}
+                >
+                  {status === "loading" ? "Sending…" : "Join"}
+                </button>
+                {status === "success" ? (
+                  <span className="w-full text-center text-xs font-medium uppercase tracking-[0.25em] text-[#0b1d3a] sm:w-auto">
+                    Danke!
+                  </span>
+                ) : null}
+                {status === "error" ? (
+                  <span className="w-full text-center text-xs font-medium uppercase tracking-[0.25em] text-[#9b1c1c] sm:w-auto">
+                    Retry
+                  </span>
+                ) : null}
+              </motion.form>
+            </motion.div>
+          </div>
+        </motion.div>
+      </section>
+
+      <div className="h-[35vh] md:h-[80vh]" />
+
+      <footer className="relative z-30 border-t border-gray-100 bg-gray-50 py-8">
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="mb-6 text-center text-xs text-gray-500">
+            <p>HUAX is a product of Lazzaro One UG</p>
+          </div>
+
+          <div className="mx-auto grid max-w-3xl grid-cols-2 gap-x-6 gap-y-4 text-xs text-gray-500 md:grid-cols-3">
+            <div>
+              <p>Lazzaro One UG (haftungsbeschränkt)</p>
+              <p>Forckenbeckstraße 63c</p>
+              <p>14199 Berlin, Germany</p>
+            </div>
+            <div>
+              <p>Managing Director:</p>
+              <p>Arsenio Longo</p>
+            </div>
+            <div>
+              <p>Phone: +49 (0)30 24618457</p>
+              <p>Email: office@lazzaro.one</p>
+            </div>
+            <div>
+              <p>Commercial Register:</p>
+              <p>Amtsgericht Charlottenburg</p>
+              <p>HRB 264590 B</p>
+            </div>
+            <div>
+              <p>VAT ID:</p>
+              <p>DE368386682</p>
+            </div>
+            <div>
+              <p>Responsible for content (§ 55 RStV):</p>
+              <p>Arsenio Longo</p>
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-gray-200 pt-6 text-center text-xs text-gray-400">
+            <p>&copy; {new Date().getFullYear()} HUAX. Energy Intelligence.</p>
+            <p className="mt-2">
+              <a className="text-[#0b1d3a] underline underline-offset-4" href="/datenschutz">
+                Datenschutzerklärung
+              </a>
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
