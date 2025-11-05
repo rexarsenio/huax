@@ -32,6 +32,7 @@ from spvx.config import AppSettings
 from spvx.api_index import router as index_router
 from spvx.api_open_sea import router as open_sea_router
 from spvx.api_market import router as market_router
+from spvx.api_anchorage import router as anchorage_router
 from spvx.analytics.relative_stress import compute_relative_stress, build_relative_stress_narrative, classify_zscore
 from spvx.open_sea.corridors import corridor_ids as known_corridor_ids
 
@@ -345,6 +346,7 @@ app.add_middleware(
 app.include_router(index_router)
 app.include_router(open_sea_router)
 app.include_router(market_router)
+app.include_router(anchorage_router)
 
 def _persist_waitlist_entry(entry: LandingWaitlistEntry) -> None:
     WAITLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
