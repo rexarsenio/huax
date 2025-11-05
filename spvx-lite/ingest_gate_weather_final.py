@@ -158,12 +158,16 @@ def fetch_gate_weather(gate_id: str, bbox: Dict, gate_name: str, basin: str) -> 
                 break
 
         if wave_var and "time" in wave_ds.coords:
+            # Get all dimensions to average over (excluding time)
+            dims_to_avg = [d for d in wave_ds[wave_var].dims if d != "time"]
+
             # Calculate spatial mean for each timestep
-            wave_mean = wave_ds[wave_var].mean(dim=["latitude", "longitude"])
+            wave_mean = wave_ds[wave_var].mean(dim=dims_to_avg)
 
             for time_val in wave_mean.coords["time"].values:
                 obs_time = pd.Timestamp(time_val).to_pydatetime()
-                hs_m = float(wave_mean.sel(time=time_val).values)
+                hs_val = wave_mean.sel(time=time_val).values
+                hs_m = float(hs_val.item() if hasattr(hs_val, 'item') else hs_val)
 
                 records.append({
                     "gate_id": gate_id,
@@ -198,14 +202,21 @@ def fetch_gate_weather(gate_id: str, bbox: Dict, gate_name: str, basin: str) -> 
 
         current_records = []
         if u_var and v_var and "time" in current_ds.coords:
-            # Calculate spatial mean
-            u_mean = current_ds[u_var].mean(dim=["latitude", "longitude"])
-            v_mean = current_ds[v_var].mean(dim=["latitude", "longitude"])
+            # Get all dimensions to average over (excluding time)
+            dims_to_avg = [d for d in current_ds[u_var].dims if d != "time"]
+
+            # Calculate spatial mean (including depth if present)
+            u_mean = current_ds[u_var].mean(dim=dims_to_avg)
+            v_mean = current_ds[v_var].mean(dim=dims_to_avg)
 
             for time_val in u_mean.coords["time"].values:
                 obs_time = pd.Timestamp(time_val).to_pydatetime()
-                u_ms = float(u_mean.sel(time=time_val).values)
-                v_ms = float(v_mean.sel(time=time_val).values)
+                u_val = u_mean.sel(time=time_val).values
+                v_val = v_mean.sel(time=time_val).values
+
+                # Ensure scalar values
+                u_ms = float(u_val.item() if hasattr(u_val, 'item') else u_val)
+                v_ms = float(v_val.item() if hasattr(v_val, 'item') else v_val)
 
                 # Convert to knots
                 u_kn = u_ms * 1.943844
