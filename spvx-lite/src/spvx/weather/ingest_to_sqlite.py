@@ -2,11 +2,13 @@
 
 import sqlite3
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
+import requests
 
-from spvx.weather.openweather import WeatherSample, fetch_all_samples
+from spvx.weather.openweather import WeatherSample, fetch_openweather, BASIN_BY_REGION
 
 LOG = logging.getLogger(__name__)
 
@@ -22,7 +24,7 @@ def init_weather_db(db_path: str) -> None:
             wind_speed_kn REAL,
             wind_gust_kn REAL,
             wave_height_m REAL,
-            weather_flags TEXT,
+            weather_flag INTEGER,
             raw_payload TEXT,
             PRIMARY KEY (observed_at, region)
         )
@@ -44,7 +46,7 @@ def upsert_weather_samples(db_path: str, samples: List[WeatherSample]) -> int:
     for sample in samples:
         cursor.execute("""
             INSERT OR REPLACE INTO weather_obs
-            (observed_at, region, basin, wind_speed_kn, wind_gust_kn, wave_height_m, weather_flags, raw_payload)
+            (observed_at, region, basin, wind_speed_kn, wind_gust_kn, wave_height_m, weather_flag, raw_payload)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             sample.observed_at.isoformat(),
@@ -53,7 +55,7 @@ def upsert_weather_samples(db_path: str, samples: List[WeatherSample]) -> int:
             sample.wind_speed_kn,
             sample.wind_gust_kn,
             sample.wave_height_m,
-            sample.weather_flags,
+            sample.weather_flag,
             sample.raw_payload
         ))
         upserted += 1
@@ -65,9 +67,6 @@ def upsert_weather_samples(db_path: str, samples: List[WeatherSample]) -> int:
 
 def run_weather_to_sqlite(regions: List[str] | None = None, db_path: str = "db/weather.db") -> int:
     """Fetch weather and write to SQLite (no DuckDB locks!)"""
-    import os
-    from spvx.config import AppSettings
-
     # Get API key
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
@@ -78,8 +77,25 @@ def run_weather_to_sqlite(regions: List[str] | None = None, db_path: str = "db/w
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     init_weather_db(db_path)
 
-    # Fetch samples
-    samples = fetch_all_samples(api_key, regions)
+    # Determine target regions
+    target_regions: List[str]
+    if regions:
+        target_regions = list(regions)
+    else:
+        target_regions = list(BASIN_BY_REGION.keys())
+
+    # Fetch samples for each region
+    samples = []
+    session = requests.Session()
+    for region in target_regions:
+        try:
+            sample = fetch_openweather(region, api_key=api_key, session=session)
+            samples.append(sample)
+            LOG.info(f"[WEATHER] Fetched {region}: wind={sample.wind_speed_kn}kn, gust={sample.wind_gust_kn}kn")
+        except Exception as exc:
+            LOG.warning(f"[WEATHER] Failed for {region}: {exc}")
+    session.close()
+
     if not samples:
         LOG.warning("No weather samples fetched")
         return 0
