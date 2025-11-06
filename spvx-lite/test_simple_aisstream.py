@@ -49,9 +49,11 @@ async def test_minimal():
         async with ws:
             print("✅ Connected!")
 
-            # MINIMAL subscription - just API key, no filters
+            # MINIMAL subscription - API key + bounding box
             subscription = {
-                "APIKey": API_KEY
+                "APIKey": API_KEY,
+                "BoundingBoxes": [[[1.0, 103.5], [1.5, 104.0]]],  # Singapore
+                "FilterMessageTypes": ["PositionReport"]
             }
 
             print(f"Sending subscription: {json.dumps(subscription, indent=2)}")

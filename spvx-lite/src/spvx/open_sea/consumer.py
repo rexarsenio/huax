@@ -156,9 +156,10 @@ class OpenSeaConsumer:
         subscription = {
             "APIKey": self.settings.api_key,
             "BoundingBoxes": self.bounding_boxes,
-            "FiltersShipType": list(range(80, 90)),
             "FilterMessageTypes": ["PositionReport"],
         }
+        # Note: AISStream API doesn't support FiltersShipType.
+        # We filter for tankers (type 80-89) in canonicalize() after receiving messages.
 
         retry_delay = 5
         max_retry = 60
