@@ -15,9 +15,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
+from urllib.parse import urlparse
 
 import websockets
 from prometheus_client import Counter, Gauge, start_http_server
+
+# Try to import python-socks for proxy support
+try:
+    from python_socks.async_.asyncio import Proxy as AsyncProxy
+    PROXY_SUPPORT = True
+except ImportError:
+    PROXY_SUPPORT = False
 
 from spvx.config import AppSettings
 from spvx.ingest.canonicalize import canonicalize
@@ -30,6 +38,46 @@ LOG = logging.getLogger(__name__)
 
 WS_URL = "wss://stream.aisstream.io/v0/stream"
 METRICS_STARTED = False
+
+
+def _get_proxy_url() -> Optional[str]:
+    """Extract proxy URL from environment variables."""
+    proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    if proxy:
+        # Check if aisstream.io is in NO_PROXY
+        no_proxy = os.getenv("NO_PROXY") or os.getenv("no_proxy") or ""
+        no_proxy_list = [h.strip() for h in no_proxy.split(",")]
+        if any(host in "aisstream.io" for host in no_proxy_list):
+            LOG.info("aisstream.io is in NO_PROXY list, skipping proxy.")
+            return None
+        LOG.info("Using HTTP proxy for WebSocket connection: %s", proxy.split("@")[0] if "@" in proxy else proxy[:50])
+    return proxy
+
+
+async def _connect_websocket_via_proxy(url: str, proxy_url: str, ping_interval: int, ping_timeout: int):
+    """Connect to WebSocket through HTTP CONNECT proxy using python-socks."""
+    if not PROXY_SUPPORT:
+        raise RuntimeError("python-socks not installed - cannot use proxy")
+
+    parsed = urlparse(proxy_url)
+    parsed_ws = urlparse(url)
+
+    # Create proxy object
+    proxy = AsyncProxy.from_url(proxy_url)
+
+    # Connect through proxy to target host
+    sock = await proxy.connect(
+        dest_host=parsed_ws.hostname,
+        dest_port=parsed_ws.port or (443 if parsed_ws.scheme == "wss" else 80)
+    )
+
+    # Now create WebSocket connection using this socket
+    return await websockets.connect(
+        url,
+        ping_interval=ping_interval,
+        ping_timeout=ping_timeout,
+        sock=sock
+    )
 
 CONSUMER_UP = Gauge("open_sea_consumer_running", "Open-sea AIS consumer liveness indicator.")
 INGEST_FIXES = Counter(
@@ -118,7 +166,19 @@ class OpenSeaConsumer:
         try:
             while not self.stop_event.is_set():
                 try:
-                    async with websockets.connect(WS_URL, ping_interval=20, ping_timeout=20) as ws:
+                    # Setup proxy if needed
+                    proxy_url = _get_proxy_url()
+
+                    if proxy_url and PROXY_SUPPORT:
+                        # Connect via proxy
+                        ws = await _connect_websocket_via_proxy(WS_URL, proxy_url, 20, 20)
+                    else:
+                        # Direct connection
+                        if proxy_url and not PROXY_SUPPORT:
+                            LOG.warning("Proxy configured but python-socks not available - attempting direct connection")
+                        ws = await websockets.connect(WS_URL, ping_interval=20, ping_timeout=20)
+
+                    async with ws:
                         LOG.info("Open-sea consumer connected to AISStream.")
                         await ws.send(json.dumps(subscription))
                         async for raw in ws:
