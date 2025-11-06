@@ -68,59 +68,62 @@ def add_missing_corridors():
     existing_poly_ids = {f['properties']['id'] for f in polygons_data['features']}
 
     # New gates to add
+    # Note: width is HALF_WIDTH (total gate width = 2 * width)
+    # Gates sized to cover main shipping lanes with buffer
     new_gates = [
-        # Sicily Strait
+        # Sicily Strait (145km wide, main lanes ~50-60nm)
         {
             "id": "GATE_SICILY_v1",
             "name": "Strait of Sicily",
             "lat": 36.5,
             "lon": 12.5,
             "bearing": 0,  # North-South
-            "width": 50.0
+            "width": 40.0  # 80nm total = 148km coverage
         },
-        # Canary Islands
+        # Canary Islands East (open ocean lanes)
         {
             "id": "GATE_CANARY_E_v1",
             "name": "Canary Islands East",
             "lat": 28.5,
             "lon": -15.5,
             "bearing": 0,
-            "width": 30.0
+            "width": 30.0  # 60nm total = 111km coverage
         },
+        # Canary Islands West (open ocean lanes)
         {
             "id": "GATE_CANARY_W_v1",
             "name": "Canary Islands West",
             "lat": 28.5,
             "lon": -18.0,
             "bearing": 0,
-            "width": 30.0
+            "width": 30.0  # 60nm total = 111km coverage
         },
-        # Dardanelles
+        # Dardanelles (narrow strait but need to catch approach traffic)
         {
             "id": "GATE_DARDANELLES_v1",
             "name": "Dardanelles Strait",
             "lat": 40.2,
             "lon": 26.4,
             "bearing": 45,  # NE-SW
-            "width": 2.0
+            "width": 5.0  # 10nm total = 18.5km (strait is 1.2km but includes approaches)
         },
-        # Otranto
+        # Otranto (72km wide strait)
         {
             "id": "GATE_OTRANTO_v1",
             "name": "Strait of Otranto",
             "lat": 40.0,
             "lon": 19.0,
             "bearing": 0,
-            "width": 20.0
+            "width": 22.5  # 45nm total = 83km coverage
         },
-        # West Africa - Bonny
+        # West Africa - Bonny (offshore terminal area)
         {
             "id": "GATE_BONNY_v1",
             "name": "Bonny Terminal Nigeria",
             "lat": 4.4,
             "lon": 7.2,
             "bearing": 90,  # E-W
-            "width": 10.0
+            "width": 10.0  # 20nm total = 37km (terminal approach area)
         }
     ]
 
