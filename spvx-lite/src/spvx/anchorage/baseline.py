@@ -66,23 +66,73 @@ def compute_daily_metrics(
     LOG.info(f"Created/updated {rows} daily metric rows")
 
 
+def compute_robust_zscore(value: float, historical_values: np.ndarray,
+                         winsorize_pct: float = 0.05, use_mad: bool = True) -> float:
+    """
+    Compute robust Z-score using Winsorizing and MAD.
+
+    Research-grade implementation resistant to outliers.
+
+    Args:
+        value: Current value to score
+        historical_values: Array of historical values for baseline
+        winsorize_pct: Percentage to cap at extremes (default 5%)
+        use_mad: Use MAD instead of STD (default True)
+
+    Returns:
+        Robust Z-score
+    """
+    if len(historical_values) < 3:
+        return 0.0
+
+    # Step 1: Winsorize historical values (cap extremes)
+    lower_bound = np.percentile(historical_values, winsorize_pct * 100)
+    upper_bound = np.percentile(historical_values, (1 - winsorize_pct) * 100)
+    winsorized = np.clip(historical_values, lower_bound, upper_bound)
+
+    # Step 2: Compute baseline using median (robust center)
+    baseline_median = np.median(winsorized)
+
+    # Step 3: Compute scale using MAD or STD
+    if use_mad:
+        # MAD (Median Absolute Deviation) - more robust than STD
+        mad = np.median(np.abs(winsorized - baseline_median))
+        baseline_scale = 1.4826 * mad  # Scale factor to match STD for normal distribution
+
+        # Prevent division by zero
+        if baseline_scale < 1e-6:
+            baseline_scale = 1.0
+    else:
+        baseline_scale = np.std(winsorized)
+        if baseline_scale < 1e-6:
+            baseline_scale = 1.0
+
+    # Step 4: Compute Z-score
+    z_score = (value - baseline_median) / baseline_scale
+
+    return z_score
+
+
 def compute_baselines(
     con: duckdb.DuckDBPyConnection,
     lookback_days: int = 90,
     min_samples: int = 20
 ):
     """
-    Compute baselines using DoW × WoY buckets.
+    Compute baselines using DoW × WoY buckets with ROBUST Z-SCORES.
 
     For each anchorage and (day_of_week, week_of_year) combination,
-    computes median and std of dwell time from historical data.
+    computes median and MAD of dwell time from historical data.
+
+    Uses research-grade robust statistics (Winsorizing + MAD) for
+    outlier-resistant anomaly detection.
 
     Args:
         con: DuckDB connection
         lookback_days: Days of history to use for baseline
         min_samples: Minimum samples required for valid baseline
     """
-    LOG.info(f"Computing baselines with {lookback_days} day lookback, min {min_samples} samples")
+    LOG.info(f"Computing ROBUST baselines with {lookback_days} day lookback, min {min_samples} samples")
 
     # Get all daily data
     query = """
@@ -107,6 +157,7 @@ def compute_baselines(
     LOG.info(f"Computing baselines from {len(df)} daily records")
 
     # Compute baselines by (anchorage_id, dow, woy)
+    # We still compute basic stats for reference, but will use robust Z-scores
     baselines = df.groupby(['anchorage_id', 'dow', 'woy'])['median_dwell_h'].agg([
         ('median', 'median'),
         ('std', 'std'),
@@ -118,7 +169,7 @@ def compute_baselines(
 
     LOG.info(f"Created {len(baselines)} baseline buckets (DoW × WoY)")
 
-    # For each daily record, find matching baseline and compute Z-score
+    # For each daily record, find matching baseline and compute ROBUST Z-score
     results = []
 
     for _, row in df.iterrows():
@@ -145,7 +196,24 @@ def compute_baselines(
             baseline_median = baseline.iloc[0]['median']
             baseline_std = baseline.iloc[0]['std']
 
-            if baseline_std > 0:
+            # Get all historical values for this bucket for ROBUST computation
+            historical = df[
+                (df['anchorage_id'] == anch_id) &
+                (df['dow'] == dow) &
+                (df['woy'] == woy) &
+                (df['ds'] < ds)  # Only use past data
+            ]['median_dwell_h'].values
+
+            if len(historical) >= 3:
+                # RESEARCH-GRADE: Robust Z-score with Winsorizing + MAD
+                z_dwell = compute_robust_zscore(
+                    value=dwell,
+                    historical_values=historical,
+                    winsorize_pct=0.05,
+                    use_mad=True
+                )
+            elif baseline_std > 0:
+                # Fallback to basic Z-score if not enough history
                 z_dwell = (dwell - baseline_median) / baseline_std
             else:
                 z_dwell = 0.0

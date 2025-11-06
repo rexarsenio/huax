@@ -28,6 +28,89 @@ class AnchorageConfig:
     ttl_out_min: int = 30  # Minutes before considering vessel truly exited
     min_dwell_min: int = 60  # Minimum dwell time to record (1 hour)
     sog_threshold_kn: float = 1.0  # Consider anchored if SOG < 1 knot
+    min_confidence: float = 0.5  # Minimum confidence for episode (0-1)
+
+
+def compute_dwell_confidence(sog_values: List[float], position_deltas: List[float],
+                            time_deltas: List[float], config: AnchorageConfig) -> float:
+    """
+    Compute confidence score for dwell episode (research-grade).
+
+    Uses multi-factor scoring with:
+    - Speed stability (low SOG with spike filtering)
+    - Position stability (minimal movement)
+    - Time consistency (sufficient duration)
+
+    Args:
+        sog_values: List of SOG measurements (knots)
+        position_deltas: List of position movements between fixes (nautical miles)
+        time_deltas: List of time gaps between fixes (hours)
+        config: Detection configuration
+
+    Returns:
+        Confidence score (0-1), where 1.0 = highest confidence
+    """
+    import numpy as np
+
+    if len(sog_values) < 2:
+        return 0.0
+
+    # Convert to numpy arrays
+    sog_arr = np.array(sog_values)
+    pos_arr = np.array(position_deltas) if position_deltas else np.array([])
+    time_arr = np.array(time_deltas) if time_deltas else np.array([])
+
+    # === Factor 1: Speed Confidence (with spike filtering) ===
+    # Use rolling median to remove GPS spikes
+    window_size = min(5, len(sog_arr))
+    if window_size >= 3:
+        # Simple moving median (numpy doesn't have built-in rolling median)
+        sog_smoothed = np.array([
+            np.median(sog_arr[max(0, i-window_size//2):min(len(sog_arr), i+window_size//2+1)])
+            for i in range(len(sog_arr))
+        ])
+    else:
+        sog_smoothed = sog_arr
+
+    # Fraction of time with low SOG
+    low_sog_fraction = np.mean(sog_smoothed < config.sog_threshold_kn)
+
+    # Stability (inverse of variance)
+    sog_variance = np.var(sog_smoothed)
+    sog_stability = np.exp(-sog_variance / 2.0)  # Exponential decay
+
+    speed_conf = 0.7 * low_sog_fraction + 0.3 * sog_stability
+
+    # === Factor 2: Position Confidence ===
+    if len(pos_arr) > 0:
+        # Median movement (robust to outliers)
+        median_movement = np.median(pos_arr)
+
+        # Exponential decay: high confidence if movement < 0.1 nm
+        pos_threshold = 0.1  # nautical miles
+        pos_conf = np.exp(-median_movement / pos_threshold)
+    else:
+        pos_conf = 0.5  # Neutral if no position data
+
+    # === Factor 3: Time Consistency ===
+    if len(time_arr) > 0:
+        total_time_hours = np.sum(time_arr)
+
+        # Sigmoid: confidence increases with duration
+        # 50% confidence at 1 hour, 95% at 4 hours
+        time_conf = 1.0 / (1.0 + np.exp(-(total_time_hours - 1.0)))
+    else:
+        time_conf = 0.5
+
+    # === Weighted Geometric Mean ===
+    # Geometric mean is more conservative than arithmetic mean
+    weights = np.array([0.5, 0.3, 0.2])  # Speed > Position > Time
+    factors = np.array([speed_conf, pos_conf, time_conf])
+
+    # Weighted geometric mean: prod(factor^weight)
+    confidence = np.prod(factors ** weights)
+
+    return float(confidence)
 
 
 @dataclass
@@ -48,6 +131,18 @@ class OpenSession:
     last_lon: float
     last_lat: float
     fix_count: int
+    # Confidence tracking
+    sog_values: list = None  # Track SOG over time
+    position_deltas: list = None  # Track position movements (nm)
+    time_deltas: list = None  # Track time between fixes (hours)
+
+    def __post_init__(self):
+        if self.sog_values is None:
+            self.sog_values = []
+        if self.position_deltas is None:
+            self.position_deltas = []
+        if self.time_deltas is None:
+            self.time_deltas = []
 
 
 @dataclass
@@ -263,6 +358,25 @@ class AnchorageDetector:
                     if key in self.open_sessions:
                         # Update existing session
                         session = self.open_sessions[key]
+
+                        # Track position delta
+                        from math import radians, cos, sin, asin, sqrt
+                        # Haversine distance in nautical miles
+                        lon1, lat1 = radians(session.last_lon), radians(session.last_lat)
+                        lon2, lat2 = radians(lon), radians(lat)
+                        dlon = lon2 - lon1
+                        dlat = lat2 - lat1
+                        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                        c = 2 * asin(sqrt(a))
+                        distance_nm = 3440.065 * c  # Earth radius in nm
+
+                        # Track time delta
+                        time_delta_h = (ts - session.last_ts).total_seconds() / 3600
+
+                        session.sog_values.append(sog if sog is not None else 0.0)
+                        session.position_deltas.append(distance_nm)
+                        session.time_deltas.append(time_delta_h)
+
                         session.last_ts = ts
                         session.last_lon = lon
                         session.last_lat = lat
@@ -278,6 +392,8 @@ class AnchorageDetector:
                             last_lat=lat,
                             fix_count=1
                         )
+                        # Initialize with first SOG
+                        self.open_sessions[key].sog_values.append(sog if sog is not None else 0.0)
 
                 # Close sessions for anchorages vessel has left
                 for (sess_mmsi, sess_anch), session in list(self.open_sessions.items()):
@@ -294,17 +410,31 @@ class AnchorageDetector:
                             dwell_h = (session.last_ts - session.enter_ts).total_seconds() / 3600
 
                             if dwell_h * 60 >= self.config.min_dwell_min:
-                                # Create episode
-                                episode = AnchorageEpisode(
-                                    mmsi=mmsi,
-                                    anchorage_id=sess_anch,
-                                    ts_entry=session.enter_ts,
-                                    ts_exit=session.last_ts,
-                                    dwell_h=dwell_h,
-                                    fixes_n=session.fix_count
+                                # RESEARCH-GRADE: Compute confidence score
+                                confidence = compute_dwell_confidence(
+                                    sog_values=session.sog_values,
+                                    position_deltas=session.position_deltas,
+                                    time_deltas=session.time_deltas,
+                                    config=self.config
                                 )
-                                self._save_episode(episode)
-                                episodes_created += 1
+
+                                # Only create episode if confidence meets threshold
+                                if confidence >= self.config.min_confidence:
+                                    episode = AnchorageEpisode(
+                                        mmsi=mmsi,
+                                        anchorage_id=sess_anch,
+                                        ts_entry=session.enter_ts,
+                                        ts_exit=session.last_ts,
+                                        dwell_h=dwell_h,
+                                        fixes_n=session.fix_count
+                                    )
+                                    self._save_episode(episode, confidence=confidence)
+                                    episodes_created += 1
+                                else:
+                                    LOG.debug(
+                                        f"Rejected episode for {mmsi} at {sess_anch}: "
+                                        f"confidence {confidence:.2f} < {self.config.min_confidence:.2f}"
+                                    )
 
                             # Remove session
                             del self.open_sessions[key]
@@ -314,14 +444,20 @@ class AnchorageDetector:
 
         LOG.info(f"Created {episodes_created} new episodes, {len(self.open_sessions)} sessions remain open")
 
-    def _save_episode(self, episode: AnchorageEpisode):
-        """Save episode to database."""
+    def _save_episode(self, episode: AnchorageEpisode, confidence: float = 1.0):
+        """Save episode to database with confidence score."""
         episode_id = f"EP_{episode.anchorage_id}_{episode.mmsi}_{int(episode.ts_entry.timestamp())}"
+
+        # Add confidence column if it doesn't exist
+        try:
+            self.con.execute("ALTER TABLE anchorage_episodes ADD COLUMN IF NOT EXISTS confidence DOUBLE DEFAULT 1.0")
+        except:
+            pass
 
         self.con.execute("""
             INSERT OR REPLACE INTO anchorage_episodes
-            (episode_id, anchorage_id, mmsi, ts_entry, ts_exit, dwell_hours, t_in, t_out, dwell_h, fixes_n)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (episode_id, anchorage_id, mmsi, ts_entry, ts_exit, dwell_hours, t_in, t_out, dwell_h, fixes_n, confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             episode_id,
             episode.anchorage_id,
@@ -332,7 +468,8 @@ class AnchorageDetector:
             episode.ts_entry,
             episode.ts_exit,
             episode.dwell_h,
-            episode.fixes_n
+            episode.fixes_n,
+            confidence
         ])
 
     def _save_open_sessions(self):
