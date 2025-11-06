@@ -60,6 +60,7 @@ src/spvx/registry/__init__.py
 src/spvx/registry/heuristics.py
 src/spvx/registry/schema.py
 src/spvx/sea_state/cmems.py
+src/spvx/sea_state/cmems_subset.py
 src/spvx/sea_state/fallback.py
 src/spvx/sources/__init__.py
 src/spvx/sources/mock.py
@@ -73,6 +74,7 @@ src/spvx/validation/__init__.py
 src/spvx/validation/components.py
 src/spvx/validation/signals.py
 src/spvx/weather/__init__.py
+src/spvx/weather/ingest_to_sqlite.py
 src/spvx/weather/openweather.py
 src/spvx/weather/sea_state.py
 src/spvx_lite.egg-info/PKG-INFO
