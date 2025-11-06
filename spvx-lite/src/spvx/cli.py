@@ -1614,6 +1614,115 @@ def derive_anchorage_cmd(
     )
 
 
+@app.command("anchorage-episodes")
+def anchorage_episodes_cmd(
+    db: str = typer.Option("db/spvx.duckdb", help="Path to DuckDB database"),
+    polygons: str = typer.Option("data/geo/polygons.geojson", help="Anchorage polygons GeoJSON"),
+    start: Optional[str] = typer.Option(None, help="Start timestamp (YYYY-MM-DD)"),
+    end: Optional[str] = typer.Option(None, help="End timestamp (YYYY-MM-DD)"),
+    min_dwell_min: int = typer.Option(60, help="Minimum dwell time in minutes"),
+):
+    """
+    Detect anchorage episodes from AIS fixes (TH-2).
+
+    Processes AIS fixes to detect when vessels enter/exit anchorage areas
+    and creates episode records with dwell times.
+    """
+    from spvx.anchorage.detect import AnchorageConfig, AnchorageDetector
+    from datetime import datetime
+
+    rprint("[bold cyan]TH-2: Anchorage Episode Detection[/bold cyan]")
+
+    # Parse dates
+    start_dt = datetime.fromisoformat(start) if start else None
+    end_dt = datetime.fromisoformat(end) if end else None
+
+    # Connect to database
+    con = duckdb.connect(db)
+
+    # Create detector
+    config = AnchorageConfig(min_dwell_min=min_dwell_min)
+    detector = AnchorageDetector(con, polygons, config)
+
+    # Process fixes
+    detector.process_fixes(start_ts=start_dt, end_ts=end_dt)
+
+    # Show summary
+    result = con.execute("""
+        SELECT
+            anchorage_id,
+            COUNT(*) as episodes,
+            COUNT(DISTINCT mmsi) as vessels,
+            AVG(dwell_hours) as avg_dwell_h,
+            MAX(ts_exit) as latest_exit
+        FROM anchorage_episodes
+        GROUP BY anchorage_id
+        ORDER BY episodes DESC
+    """).fetchall()
+
+    rprint("\n[bold]Episode Summary:[/bold]")
+    if result:
+        for anch, eps, vessels, avg_dwell, latest in result:
+            rprint(f"  {anch:30s}: {eps:5d} episodes | {vessels:4d} vessels | {avg_dwell:5.1f}h avg")
+    else:
+        rprint("[yellow]  No episodes detected yet[/yellow]")
+
+    con.close()
+
+
+@app.command("anchorage-backfill")
+def anchorage_backfill_cmd(
+    db: str = typer.Option("db/spvx.duckdb", help="Path to DuckDB database"),
+    start: Optional[str] = typer.Option(None, help="Start date for aggregation (YYYY-MM-DD)"),
+    end: Optional[str] = typer.Option(None, help="End date for aggregation (YYYY-MM-DD)"),
+    lookback_days: int = typer.Option(90, help="Days to use for baseline computation"),
+    min_samples: int = typer.Option(20, help="Minimum samples per baseline bucket"),
+):
+    """
+    Compute daily metrics, baselines, and Z-scores for anchorages (TH-3).
+
+    Aggregates episodes into daily metrics and enriches with statistical
+    baselines for anomaly detection.
+    """
+    from spvx.anchorage.baseline import backfill_all
+    from datetime import datetime
+
+    rprint("[bold cyan]TH-3: Anchorage Baseline & Z-Score Enrichment[/bold cyan]")
+
+    # Parse dates
+    start_dt = datetime.fromisoformat(start) if start else None
+    end_dt = datetime.fromisoformat(end) if end else None
+
+    # Connect to database
+    con = duckdb.connect(db)
+
+    # Run backfill
+    backfill_all(con, start_dt, end_dt, lookback_days, min_samples)
+
+    # Show summary
+    result = con.execute("""
+        SELECT
+            anchorage_id,
+            COUNT(*) as days,
+            AVG(median_dwell_h) as avg_dwell,
+            COUNT(*) FILTER (WHERE anomaly_detected) as anomaly_days,
+            MAX(ds) as latest_date
+        FROM anchorage_daily_dwell
+        GROUP BY anchorage_id
+        ORDER BY days DESC
+    """).fetchall()
+
+    rprint("\n[bold]Daily Metrics Summary:[/bold]")
+    if result:
+        for anch, days, avg_dwell, anomalies, latest in result:
+            status = "🔴" if anomalies > 0 else "✅"
+            rprint(f"  {status} {anch:30s}: {days:3d} days | {avg_dwell:5.1f}h avg | {anomalies:2d} anomalies | Latest: {latest}")
+    else:
+        rprint("[yellow]  No daily metrics yet[/yellow]")
+
+    con.close()
+
+
 def run():
     app()
 
