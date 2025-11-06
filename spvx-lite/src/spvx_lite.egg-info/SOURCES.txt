@@ -15,6 +15,11 @@ src/spvx/analytics/anomaly_detection.py
 src/spvx/analytics/current_anchorage.py
 src/spvx/analytics/predictions.py
 src/spvx/analytics/relative_stress.py
+src/spvx/anchorage/__init__.py
+src/spvx/anchorage/baseline.py
+src/spvx/anchorage/detect.py
+src/spvx/api/__init__.py
+src/spvx/api/th4_api.py
 src/spvx/db/__init__.py
 src/spvx/db/schema.py
 src/spvx/etl/__init__.py
@@ -73,6 +78,7 @@ src/spvx/weather/sea_state.py
 src/spvx_lite.egg-info/PKG-INFO
 src/spvx_lite.egg-info/SOURCES.txt
 src/spvx_lite.egg-info/dependency_links.txt
+src/spvx_lite.egg-info/entry_points.txt
 src/spvx_lite.egg-info/requires.txt
 src/spvx_lite.egg-info/top_level.txt
 tests/test_ais_mapping.py
