@@ -4,9 +4,11 @@ Typer CLI entrypoint for SPVX-Lite pipeline.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 from pathlib import Path
+from typing import Optional
 
 import duckdb
 import numpy as np
