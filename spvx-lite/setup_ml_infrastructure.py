@@ -69,7 +69,7 @@ def main():
             start_date DATE,
             end_date DATE,
             severity VARCHAR,    -- 'low', 'medium', 'high'
-            impact_corridors TEXT[],  -- Array of affected corridor IDs
+            impact_corridors VARCHAR,  -- JSON array of affected corridor IDs
             source VARCHAR DEFAULT 'manual',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -171,7 +171,7 @@ def main():
 
             -- Model information
             model_version VARCHAR,
-            features_used TEXT[],
+            features_used VARCHAR,  -- JSON string of feature names
 
             -- Trading outcome (for backtesting)
             was_correct BOOLEAN,  -- Filled in retrospectively
@@ -179,12 +179,13 @@ def main():
 
             -- Metadata
             generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            resolved_at TIMESTAMP,  -- When actual outcome known
-
-            INDEX idx_signal_date (ds),
-            INDEX idx_signal_anchorage (anchorage_id)
+            resolved_at TIMESTAMP  -- When actual outcome known
         )
     """)
+
+    # Create indexes separately
+    con.execute("CREATE INDEX IF NOT EXISTS idx_signal_date ON trading_signals_history(ds)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_signal_anchorage ON trading_signals_history(anchorage_id)")
     print("   ✅ trading_signals_history table")
 
     print()
