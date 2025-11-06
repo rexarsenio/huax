@@ -66,7 +66,7 @@ def main():
     # Check if sea_state_samples exists
     try:
         con.execute("SELECT 1 FROM sea_state_samples LIMIT 1").fetchone()
-        checks.append(check_table(con, "sea_state_samples", "time", "Sea State Samples (Waves/Currents)"))
+        checks.append(check_table(con, "sea_state_samples", "ts", "Sea State Samples (Waves/Currents)"))
     except:
         print("❌ Sea State Samples")
         print("   Table 'sea_state_samples' does not exist")
