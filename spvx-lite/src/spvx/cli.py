@@ -1766,6 +1766,108 @@ def serve_api_cmd(
     )
 
 
+@app.command("ingest-sea-state-subset")
+def ingest_sea_state_subset(
+    lookback_days: int = typer.Option(1, help="Number of days to fetch."),
+    buffer_km: float = typer.Option(50.0, help="Buffer around bbox in km."),
+):
+    """
+    Fetch CMEMS sea-state using efficient subset API (downloads only bounding boxes).
+
+    This command is MUCH faster than ingest-sea-state --provider=cmems because it
+    downloads only the specific regions instead of full global files.
+
+    Processes ALL 18 chokepoints from config.yml efficiently.
+    """
+    from spvx.sea_state.cmems_subset import download_all_regions_subset
+    from spvx.sea_state.cmems import extract_region_features, DEFAULT_FEATURES
+
+    cfg = load_config()
+    sea_cfg = cfg.get("sea_state", {})
+    cps_cfg = cfg.get("chokepoints", {})
+
+    waves_dataset_id = sea_cfg.get("waves_dataset_id")
+    currents_dataset_id = sea_cfg.get("currents_dataset_id")
+    out_dir = sea_cfg.get("out_dir", "data/sea_state")
+    features_cfg = sea_cfg.get("features") or DEFAULT_FEATURES
+
+    if not waves_dataset_id or not currents_dataset_id:
+        raise typer.BadParameter("sea_state.waves_dataset_id and currents_dataset_id must be set in config.yml")
+
+    # Get CMEMS credentials
+    username = os.getenv("CMEMS_USERNAME")
+    password = os.getenv("CMEMS_PASSWORD")
+
+    if not username or not password:
+        raise typer.BadParameter("CMEMS_USERNAME and CMEMS_PASSWORD environment variables required")
+
+    rprint(f"[cyan]🌊 CMEMS Subset Ingestion[/cyan]")
+    rprint(f"   Chokepoints: {len(cps_cfg)}")
+    rprint(f"   Lookback: {lookback_days} days")
+    rprint(f"   Buffer: {buffer_km} km")
+    rprint()
+
+    # Download waves for all regions
+    with log_step("Downloading CMEMS waves (subset API)"):
+        wave_files = download_all_regions_subset(
+            dataset_id=waves_dataset_id,
+            out_dir=f"{out_dir}/waves_subset",
+            regions=cps_cfg,
+            lookback_days=lookback_days,
+            buffer_km=buffer_km,
+            username=username,
+            password=password,
+        )
+        rprint(f"[green]✅ Downloaded {len(wave_files)}/{len(cps_cfg)} wave regions[/green]")
+
+    # Download currents for all regions
+    with log_step("Downloading CMEMS currents (subset API)"):
+        current_files = download_all_regions_subset(
+            dataset_id=currents_dataset_id,
+            out_dir=f"{out_dir}/currents_subset",
+            regions=cps_cfg,
+            lookback_days=lookback_days,
+            buffer_km=buffer_km,
+            username=username,
+            password=password,
+        )
+        rprint(f"[green]✅ Downloaded {len(current_files)}/{len(cps_cfg)} current regions[/green]")
+
+    # Process each chokepoint
+    total_rows = 0
+    with log_step("Processing sea-state features"):
+        for cid, meta in cps_cfg.items():
+            if cid not in wave_files and cid not in current_files:
+                rprint(f"[yellow]⚠️  Skipping {cid}: no data[/yellow]")
+                continue
+
+            waves_list = [wave_files[cid]] if cid in wave_files else []
+            currents_list = [current_files[cid]] if cid in current_files else []
+
+            try:
+                df = extract_region_features(
+                    waves_files=waves_list,
+                    currents_files=currents_list,
+                    features_cfg=features_cfg,
+                    bbox=meta["bbox"],
+                    bearing_deg=float(meta.get("bearing_deg", 0.0)),
+                    buffer_km=0.0,  # Already buffered during download
+                ).sort_values("time")
+
+                outp = Path(f"data/processed/sea_state_{cid}.parquet")
+                outp.parent.mkdir(parents=True, exist_ok=True)
+                df.to_parquet(outp, index=False)
+                total_rows += len(df)
+                rprint(f"[green]✅ {cid}: {len(df)} rows → {outp}[/green]")
+            except Exception as exc:
+                rprint(f"[red]❌ {cid}: {exc}[/red]")
+
+    rprint()
+    rprint(f"[bold green]✅ CMEMS Subset Ingestion Complete![/bold green]")
+    rprint(f"   Regions processed: {len(wave_files) + len(current_files)}")
+    rprint(f"   Total rows: {total_rows:,}")
+
+
 def run():
     app()
 
