@@ -23,14 +23,14 @@ def main():
     print("=" * 70)
     print()
 
-    # Get date range from anchorage_daily_dwell
+    # Get date range from anchorage_daily
     date_range = con.execute("""
         SELECT MIN(ds), MAX(ds)
-        FROM anchorage_daily_dwell
+        FROM anchorage_daily
     """).fetchone()
 
     if not date_range[0]:
-        print("❌ No data in anchorage_daily_dwell. Run TH-3 first!")
+        print("❌ No data in anchorage_daily. Run TH-3 first!")
         con.close()
         return
 
@@ -104,7 +104,7 @@ def main():
 
             CURRENT_TIMESTAMP as created_at
 
-        FROM anchorage_daily_dwell d
+        FROM anchorage_daily d
 
         -- Join SIS data for Malacca corridor
         LEFT JOIN sis_daily sis
@@ -138,7 +138,7 @@ def main():
             SELECT
                 ds,
                 SUM(episode_count) as total_vessels
-            FROM anchorage_daily_dwell
+            FROM anchorage_daily
             WHERE anchorage_id LIKE 'ANCH_%'
               AND anchorage_id NOT LIKE 'ANCH_OPL%'
             GROUP BY ds

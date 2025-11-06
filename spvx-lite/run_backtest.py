@@ -37,7 +37,7 @@ def main():
             median_dwell_h,
             z_dwell,
             anomaly_detected
-        FROM anchorage_daily_dwell
+        FROM anchorage_daily
         WHERE anchorage_id = 'ANCH_OPL_SIN'  -- Focus on OPL Singapore
           AND median_dwell_h IS NOT NULL
           AND z_dwell IS NOT NULL

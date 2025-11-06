@@ -179,7 +179,7 @@ def create_app(db_path: str = "db/spvx.duckdb") -> FastAPI:
                 z_dwell,
                 anomaly_detected,
                 episode_count
-            FROM anchorage_daily_dwell
+            FROM anchorage_daily
             WHERE anchorage_id = ?
             ORDER BY ds DESC
             LIMIT 1
@@ -337,7 +337,7 @@ def create_app(db_path: str = "db/spvx.duckdb") -> FastAPI:
                 median_dwell_h,
                 z_dwell,
                 anomaly_detected
-            FROM anchorage_daily_dwell
+            FROM anchorage_daily
             WHERE anchorage_id = 'ANCH_OPL_SIN'
             ORDER BY ds DESC
             LIMIT 1
@@ -353,10 +353,10 @@ def create_app(db_path: str = "db/spvx.duckdb") -> FastAPI:
             SELECT
                 SUM(episode_count) as total_vessels,
                 AVG(median_dwell_h) as avg_dwell
-            FROM anchorage_daily_dwell
+            FROM anchorage_daily
             WHERE anchorage_id LIKE 'ANCH_%'
               AND anchorage_id NOT LIKE 'ANCH_OPL%'
-              AND ds = (SELECT MAX(ds) FROM anchorage_daily_dwell)
+              AND ds = (SELECT MAX(ds) FROM anchorage_daily)
         """).fetchone()
 
         if shandong_metrics and shandong_metrics[0]:
@@ -422,7 +422,7 @@ def create_app(db_path: str = "db/spvx.duckdb") -> FastAPI:
         # Get historical baseline
         baseline = con.execute("""
             SELECT AVG(median_dwell_h), STDDEV(median_dwell_h)
-            FROM anchorage_daily_dwell
+            FROM anchorage_daily
             WHERE anchorage_id = ?
               AND ds >= CURRENT_DATE - INTERVAL '90 days'
         """, [anchorage_id]).fetchone()
