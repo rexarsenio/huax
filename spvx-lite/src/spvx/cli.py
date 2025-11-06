@@ -1723,6 +1723,47 @@ def anchorage_backfill_cmd(
     con.close()
 
 
+@app.command("serve-api")
+def serve_api_cmd(
+    db: str = typer.Option("db/spvx.duckdb", help="Path to DuckDB database"),
+    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
+    port: int = typer.Option(8000, help="Port to listen on"),
+    reload: bool = typer.Option(False, help="Enable auto-reload (development)"),
+):
+    """
+    Start TH-4 REST API server (production-grade FastAPI).
+
+    Provides real-time endpoints for:
+    - Anchorage status and episodes
+    - Corridor SIS metrics
+    - Supply chain health
+    - ML-based forecasts (when models available)
+    """
+    try:
+        import uvicorn
+        from spvx.api.th4_api import create_app
+    except ImportError:
+        rprint("[red]❌ FastAPI/Uvicorn not installed![/red]")
+        rprint("Install with: pip install fastapi uvicorn")
+        raise typer.Exit(1)
+
+    rprint(f"[bold cyan]🚀 Starting TH-4 REST API Server[/bold cyan]")
+    rprint(f"   Database: {db}")
+    rprint(f"   Host:     {host}:{port}")
+    rprint(f"   Docs:     http://{host if host != '0.0.0.0' else 'localhost'}:{port}/docs")
+    rprint()
+
+    app_instance = create_app(db_path=db)
+
+    uvicorn.run(
+        app_instance,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info"
+    )
+
+
 def run():
     app()
 
