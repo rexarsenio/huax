@@ -1868,6 +1868,29 @@ def ingest_sea_state_subset(
     rprint(f"   Total rows: {total_rows:,}")
 
 
+@app.command("ingest-weather-sqlite")
+def ingest_weather_sqlite(
+    regions: str = typer.Option("", help="Comma-separated list of regions."),
+    db_path: str = typer.Option("db/weather.db", help="SQLite database path."),
+):
+    """
+    Fetch OpenWeather data and write to separate SQLite DB (no DuckDB locks).
+
+    This avoids lock conflicts with the AIS Consumer.
+    """
+    from spvx.weather.ingest_to_sqlite import run_weather_to_sqlite
+
+    region_list = [r.strip() for r in regions.split(",") if r.strip()] if regions else None
+
+    with log_step("OpenWeather → SQLite"):
+        upserted = run_weather_to_sqlite(regions=region_list, db_path=db_path)
+
+    if upserted == 0:
+        rprint("[yellow]No weather samples ingested.[/yellow]")
+    else:
+        rprint(f"[green]✅ Stored {upserted} weather samples in {db_path}[/green]")
+
+
 def run():
     app()
 
