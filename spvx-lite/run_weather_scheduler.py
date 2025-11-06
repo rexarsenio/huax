@@ -33,6 +33,23 @@ def run_weather_ingest():
         if result.returncode == 0:
             LOG.info("✅ Weather ingestion successful")
             LOG.info(result.stdout)
+
+            # Sync SQLite → DuckDB (fast, minimal lock)
+            LOG.info("Syncing weather data SQLite → DuckDB...")
+            sync_result = subprocess.run(
+                ['python3', '-m', 'spvx.weather.sync_sqlite_to_duckdb'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if sync_result.returncode == 0:
+                LOG.info("✅ Weather sync successful")
+                LOG.info(sync_result.stdout)
+            else:
+                LOG.warning("⚠️  Weather sync had issues (non-critical)")
+                LOG.warning(sync_result.stderr)
+
         else:
             LOG.error(f"❌ Weather ingestion failed with code {result.returncode}")
             LOG.error(result.stderr)
