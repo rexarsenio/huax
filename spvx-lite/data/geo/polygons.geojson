@@ -1,0 +1,401 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_MALACCA_v1",
+        "kind": "gate",
+        "name": "Malacca Strait",
+        "bearing": 315,
+        "width_nm": 15
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[100.3, 1.3], [100.5, 1.5]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_GIBRALTAR_v1",
+        "kind": "gate",
+        "name": "Gibraltar Strait",
+        "bearing": 90,
+        "width_nm": 10
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-5.6, 36.0], [-5.3, 36.1]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_BOSPORUS_v1",
+        "kind": "gate",
+        "name": "Bosporus Strait",
+        "bearing": 0,
+        "width_nm": 5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[29.0, 41.1], [29.1, 41.2]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_DARDANELLES_v1",
+        "kind": "gate",
+        "name": "Dardanelles Strait",
+        "bearing": 45,
+        "width_nm": 5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[26.35, 40.05], [26.45, 40.15]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_SUEZ_v1",
+        "kind": "gate",
+        "name": "Suez Canal",
+        "bearing": 0,
+        "width_nm": 3
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[32.3, 29.9], [32.4, 30.0]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_BAB_EL_MANDEB_v1",
+        "kind": "gate",
+        "name": "Bab el-Mandeb",
+        "bearing": 0,
+        "width_nm": 18
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[43.35, 12.58], [43.45, 12.68]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_HORMUZ_v1",
+        "kind": "gate",
+        "name": "Strait of Hormuz",
+        "bearing": 90,
+        "width_nm": 21
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[56.2, 26.5], [56.4, 26.6]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_PANAMA_v1",
+        "kind": "gate",
+        "name": "Panama Canal",
+        "bearing": 90,
+        "width_nm": 2
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-79.9, 9.0], [-79.5, 9.4]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_DOVER_v1",
+        "kind": "gate",
+        "name": "Dover Strait",
+        "bearing": 45,
+        "width_nm": 21
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[1.45, 50.95], [1.55, 51.05]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_SICILY_v1",
+        "kind": "gate",
+        "name": "Sicily Strait",
+        "bearing": 0,
+        "width_nm": 40
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[12.45, 36.45], [12.55, 36.55]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_OTRANTO_v1",
+        "kind": "gate",
+        "name": "Otranto Strait",
+        "bearing": 90,
+        "width_nm": 22.5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[18.95, 39.95], [19.05, 40.05]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_CANARY_E_v1",
+        "kind": "gate",
+        "name": "Canary Islands East",
+        "bearing": 0,
+        "width_nm": 30
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-15.45, 28.45], [-15.55, 28.55]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_CANARY_W_v1",
+        "kind": "gate",
+        "name": "Canary Islands West",
+        "bearing": 0,
+        "width_nm": 30
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-17.95, 28.45], [-18.05, 28.55]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_BONNY_v1",
+        "kind": "gate",
+        "name": "Bonny Terminal Nigeria",
+        "bearing": 90,
+        "width_nm": 10
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[7.15, 4.40], [7.20, 4.46]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_HOUSTON_v1",
+        "kind": "gate",
+        "name": "Houston Ship Channel",
+        "bearing": 0,
+        "width_nm": 8
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-94.78, 29.32], [-94.72, 29.38]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_SINGAPORE_v1",
+        "kind": "gate",
+        "name": "Singapore Strait",
+        "bearing": 90,
+        "width_nm": 12
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[103.82, 1.23], [103.88, 1.27]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_LOMBOK_v1",
+        "kind": "gate",
+        "name": "Lombok Strait",
+        "bearing": 0,
+        "width_nm": 20
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[115.88, -8.52], [115.92, -8.48]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GATE_SUNDA_v1",
+        "kind": "gate",
+        "name": "Sunda Strait",
+        "bearing": 90,
+        "width_nm": 15
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[105.88, -6.02], [105.92, -5.98]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_OPL_SIN",
+        "kind": "anchorage",
+        "name": "OPL Singapore Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [103.5, 1.0],
+          [104.0, 1.0],
+          [104.0, 1.5],
+          [103.5, 1.5],
+          [103.5, 1.0]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_QINGDAO",
+        "kind": "anchorage",
+        "name": "Qingdao Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [120.2, 36.0],
+          [120.5, 36.0],
+          [120.5, 36.2],
+          [120.2, 36.2],
+          [120.2, 36.0]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_RIZHAO",
+        "kind": "anchorage",
+        "name": "Rizhao Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [119.4, 35.3],
+          [119.6, 35.3],
+          [119.6, 35.5],
+          [119.4, 35.5],
+          [119.4, 35.3]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_YANTAI",
+        "kind": "anchorage",
+        "name": "Yantai Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [121.3, 37.4],
+          [121.5, 37.4],
+          [121.5, 37.6],
+          [121.3, 37.6],
+          [121.3, 37.4]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_LONGKOU",
+        "kind": "anchorage",
+        "name": "Longkou Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [120.2, 37.6],
+          [120.4, 37.6],
+          [120.4, 37.7],
+          [120.2, 37.7],
+          [120.2, 37.6]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_LANSHAN",
+        "kind": "anchorage",
+        "name": "Lanshan Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [119.3, 35.1],
+          [119.5, 35.1],
+          [119.5, 35.2],
+          [119.3, 35.2],
+          [119.3, 35.1]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_HOUSTON",
+        "kind": "anchorage",
+        "name": "Houston Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-95.0, 29.2],
+          [-94.8, 29.2],
+          [-94.8, 29.4],
+          [-95.0, 29.4],
+          [-95.0, 29.2]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_ROTTERDAM",
+        "kind": "anchorage",
+        "name": "Rotterdam Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [3.9, 51.8],
+          [4.2, 51.8],
+          [4.2, 52.0],
+          [3.9, 52.0],
+          [3.9, 51.8]
+        ]]
+      }
+    }
+  ]
+}

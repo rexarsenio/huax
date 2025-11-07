@@ -28,6 +28,7 @@ spvx-lite/logs/
 spvx-lite/exports/
 spvx-lite/db/*.duckdb
 spvx-lite/db/*.duckdb.*
+spvx-lite/db/*.db
 spvx-lite/.env
 spvx-lite/.env.*
 spvx-lite/.venv312/

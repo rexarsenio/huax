@@ -1,0 +1,285 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_OPL_SIN",
+        "kind": "anchorage",
+        "name": "OPL Singapore Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              103.5,
+              1.0
+            ],
+            [
+              104.0,
+              1.0
+            ],
+            [
+              104.0,
+              1.5
+            ],
+            [
+              103.5,
+              1.5
+            ],
+            [
+              103.5,
+              1.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_QINGDAO",
+        "kind": "anchorage",
+        "name": "Qingdao Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.2,
+              36.0
+            ],
+            [
+              120.5,
+              36.0
+            ],
+            [
+              120.5,
+              36.2
+            ],
+            [
+              120.2,
+              36.2
+            ],
+            [
+              120.2,
+              36.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_RIZHAO",
+        "kind": "anchorage",
+        "name": "Rizhao Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              119.4,
+              35.3
+            ],
+            [
+              119.6,
+              35.3
+            ],
+            [
+              119.6,
+              35.5
+            ],
+            [
+              119.4,
+              35.5
+            ],
+            [
+              119.4,
+              35.3
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_YANTAI",
+        "kind": "anchorage",
+        "name": "Yantai Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              121.3,
+              37.4
+            ],
+            [
+              121.5,
+              37.4
+            ],
+            [
+              121.5,
+              37.6
+            ],
+            [
+              121.3,
+              37.6
+            ],
+            [
+              121.3,
+              37.4
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_LONGKOU",
+        "kind": "anchorage",
+        "name": "Longkou Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.2,
+              37.6
+            ],
+            [
+              120.4,
+              37.6
+            ],
+            [
+              120.4,
+              37.7
+            ],
+            [
+              120.2,
+              37.7
+            ],
+            [
+              120.2,
+              37.6
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_LANSHAN",
+        "kind": "anchorage",
+        "name": "Lanshan Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              119.3,
+              35.1
+            ],
+            [
+              119.5,
+              35.1
+            ],
+            [
+              119.5,
+              35.2
+            ],
+            [
+              119.3,
+              35.2
+            ],
+            [
+              119.3,
+              35.1
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_HOUSTON",
+        "kind": "anchorage",
+        "name": "Houston Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -95.0,
+              29.2
+            ],
+            [
+              -94.8,
+              29.2
+            ],
+            [
+              -94.8,
+              29.4
+            ],
+            [
+              -95.0,
+              29.4
+            ],
+            [
+              -95.0,
+              29.2
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ANCH_ROTTERDAM",
+        "kind": "anchorage",
+        "name": "Rotterdam Anchorage"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              3.9,
+              51.8
+            ],
+            [
+              4.2,
+              51.8
+            ],
+            [
+              4.2,
+              52.0
+            ],
+            [
+              3.9,
+              52.0
+            ],
+            [
+              3.9,
+              51.8
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

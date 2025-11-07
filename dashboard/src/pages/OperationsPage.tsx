@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { RegistryPanel } from "../components/RegistryPanel";
 import { SISBadge } from "../components/SISBadge";
 import { useSISData } from "../hooks/useSISData";
+import { GateWeatherPanel } from "../components/GateWeatherPanel";
 
 export const OperationsPage = () => {
   const { data: health } = useHealthStatus();
@@ -32,6 +33,12 @@ export const OperationsPage = () => {
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto">
       <RegistryPanel />
+
+      {/* Gate Weather - Independent of ship movements */}
+      <GateWeatherPanel
+        window="h24"
+        title="Gate Weather Conditions (24h)"
+      />
 
       <Card title={t("operations.systemHealth.title")} variant="elevated">
         <div className="grid gap-6 sm:grid-cols-2">

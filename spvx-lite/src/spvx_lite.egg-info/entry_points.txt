@@ -1,0 +1,2 @@
+[console_scripts]
+spvx = spvx.cli:run

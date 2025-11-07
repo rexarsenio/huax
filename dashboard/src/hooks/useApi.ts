@@ -23,6 +23,7 @@ import {
   fetchTransit,
   fetchCorridors,
   fetchSeaStateSummary,
+  fetchGateWeather,
   type GateFluxWindow,
   type TransitParams,
 } from "../api/openSea";
@@ -188,4 +189,11 @@ export const useMarketOil = (series: string[] = ["RBRTE", "RWTC"], range = "180d
     queryKey: ["market-oil", series.join(","), range],
     queryFn: () => fetchOil(series, range),
     staleTime: 6 * 60_000,
+  });
+
+export const useGateWeather = (window: string = "h24", gateIds?: string[]) =>
+  useQuery({
+    queryKey: ["open-sea", "gate-weather", window, gateIds?.join(",") ?? "ALL"],
+    queryFn: () => fetchGateWeather(window, gateIds),
+    refetchInterval: 30 * 60_000, // Refresh every 30 minutes
   });
